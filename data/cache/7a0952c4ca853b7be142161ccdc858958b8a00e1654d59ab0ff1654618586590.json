@@ -1,0 +1,33 @@
+{
+  "extraction_type": "certificate",
+  "extractor_version": 3,
+  "source_file": "E_Ganesh_Packaging_Industries_ISO9001.pdf",
+  "file_kind": "pdf",
+  "sha256": "7a0952c4ca853b7be142161ccdc858958b8a00e1654d59ab0ff1654618586590",
+  "rfx_id": null,
+  "extracted_at": "2026-09-30T16:56:12+00:00",
+  "runs": [
+    {
+      "holder": "Ganesh Packaging Industries",
+      "standard": "ISO 9001:2015",
+      "certificate_number": "SCS-QMS-15582",
+      "valid_until": {
+        "value": "2026-12-31",
+        "iso_date": "2026-12-31",
+        "source_snippet": "Valid until: 2026-12-31"
+      },
+      "source_snippet": "Ganesh Packaging Industries\nhas been assessed and found to conform to the requirements of\nISO 9001:2015\nScope: Manufacture and supply of corrugated boxes and packaging products\nCertificate No: SCS-QMS-15582\nDate of original registration: 16 March 2023\nValid until: 2026-12-31",
+      "source_file": "E_Ganesh_Packaging_Industries_ISO9001.pdf"
+    }
+  ],
+  "usage": [
+    {
+      "model": "claude-sonnet-5-5",
+      "input_tokens": 4,
+      "output_tokens": 228,
+      "cache_write_tokens": 2568,
+      "cache_read_tokens": 0
+    }
+  ],
+  "cost_usd": 0.0087
+}

@@ -8,7 +8,7 @@ import openpyxl
 import pytest
 from PIL import Image
 
-from aera.ingest import MAX_IMAGE_SIDE_PX, load_reply
+from aera.ingest import IMAGE_MEDIA_TYPES, MAX_IMAGE_SIDE_PX, load_reply
 
 REPLIES = Path(__file__).resolve().parents[1] / "data" / "sample" / "replies"
 EXCEL = REPLIES / "A_Deccan_Corrupack_quotation.xlsx"
@@ -122,10 +122,25 @@ def test_large_image_is_downscaled_but_hash_is_of_original(tmp_path):
     assert sent.size == (2000, 1000)
 
 
+def _small_sample_image() -> Path | None:
+    """First image in the sample replies folder that is small enough to be sent as-is."""
+    for path in sorted(REPLIES.iterdir()):
+        if path.suffix.lower() in IMAGE_MEDIA_TYPES:
+            with Image.open(path) as img:
+                if max(img.size) <= MAX_IMAGE_SIDE_PX:
+                    return path
+    return None
+
+
 def test_small_image_sent_unchanged():
-    path = REPLIES / "D_backup_synthetic_angled_photo.jpg"
+    path = _small_sample_image()
+    if path is None:
+        pytest.skip(
+            f"No .jpg/.jpeg/.png in {REPLIES} with a long side of {MAX_IMAGE_SIDE_PX}px or less; "
+            "add a sample photo to run this test."
+        )
     p = load_reply(path)
-    assert p.content_blocks[0]["source"]["media_type"] == "image/jpeg"
+    assert p.content_blocks[0]["source"]["media_type"] == IMAGE_MEDIA_TYPES[path.suffix.lower()]
     assert base64.b64decode(p.content_blocks[0]["source"]["data"]) == path.read_bytes()
 
 

@@ -1,0 +1,33 @@
+{
+  "extraction_type": "certificate",
+  "extractor_version": 3,
+  "source_file": "A_Deccan_Corrupack_Pvt_Ltd_ISO9001.pdf",
+  "file_kind": "pdf",
+  "sha256": "97d519de2cae6afe2302d02fe6ce065d5cfaf983d92986597ac080e4da7f479e",
+  "rfx_id": null,
+  "extracted_at": "2026-09-30T16:55:47+00:00",
+  "runs": [
+    {
+      "holder": "Deccan Corrupack Pvt Ltd",
+      "standard": "ISO 9001:2015",
+      "certificate_number": "SCS-QMS-24118",
+      "valid_until": {
+        "value": "2027-08-31",
+        "iso_date": "2027-08-31",
+        "source_snippet": "Valid until: 2027-08-31"
+      },
+      "source_snippet": "Deccan Corrupack Pvt Ltd\nhas been assessed and found to conform to the requirements of\nISO 9001:2015\nScope: Manufacture and supply of corrugated boxes and packaging products\nCertificate No: SCS-QMS-24118\nDate of original registration: 16 March 2023\nValid until: 2027-08-31",
+      "source_file": "A_Deccan_Corrupack_Pvt_Ltd_ISO9001.pdf"
+    }
+  ],
+  "usage": [
+    {
+      "model": "claude-sonnet-5-5",
+      "input_tokens": 4,
+      "output_tokens": 238,
+      "cache_write_tokens": 2573,
+      "cache_read_tokens": 0
+    }
+  ],
+  "cost_usd": 0.0088
+}

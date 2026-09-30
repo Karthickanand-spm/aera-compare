@@ -1,0 +1,33 @@
+{
+  "extraction_type": "certificate",
+  "extractor_version": 3,
+  "source_file": "B_Indus_Packaging_Solutions_ISO9001.pdf",
+  "file_kind": "pdf",
+  "sha256": "8dedde65fa49087cfdb0e6e4930c2adeb8d989524db97927e236c5f1bf9797fb",
+  "rfx_id": null,
+  "extracted_at": "2026-09-30T16:55:56+00:00",
+  "runs": [
+    {
+      "holder": "Indus Packaging Solutions",
+      "standard": "ISO 9001:2015",
+      "certificate_number": "SCS-QMS-31907",
+      "valid_until": {
+        "value": "2028-01-15",
+        "iso_date": "2028-01-15",
+        "source_snippet": "Valid until: 2028-01-15"
+      },
+      "source_snippet": "Indus Packaging Solutions has been assessed and found to conform to the requirements of ISO 9001:2015 Scope: Manufacture and supply of corrugated boxes and packaging products Certificate No: SCS-QMS-31907 Date of original registration: 16 March 2023 Valid until: 2028-01-15",
+      "source_file": "B_Indus_Packaging_Solutions_ISO9001.pdf"
+    }
+  ],
+  "usage": [
+    {
+      "model": "claude-sonnet-5-5",
+      "input_tokens": 4,
+      "output_tokens": 219,
+      "cache_write_tokens": 2567,
+      "cache_read_tokens": 0
+    }
+  ],
+  "cost_usd": 0.0086
+}

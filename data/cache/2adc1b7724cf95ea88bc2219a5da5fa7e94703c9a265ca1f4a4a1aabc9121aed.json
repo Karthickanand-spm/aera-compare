@@ -1,0 +1,33 @@
+{
+  "extraction_type": "certificate",
+  "extractor_version": 3,
+  "source_file": "D_Harbourline_Packaging_ISO9001.pdf",
+  "file_kind": "pdf",
+  "sha256": "2adc1b7724cf95ea88bc2219a5da5fa7e94703c9a265ca1f4a4a1aabc9121aed",
+  "rfx_id": null,
+  "extracted_at": "2026-09-30T16:56:04+00:00",
+  "runs": [
+    {
+      "holder": "Harbourline Packaging",
+      "standard": "ISO 9001:2015",
+      "certificate_number": "SCS-QMS-27730",
+      "valid_until": {
+        "value": "2027-05-20",
+        "iso_date": "2027-05-20",
+        "source_snippet": "Valid until: 2027-05-20"
+      },
+      "source_snippet": "Harbourline Packaging\nhas been assessed and found to conform to the requirements of\nISO 9001:2015\nScope: Manufacture and supply of corrugated boxes and packaging products\nCertificate No: SCS-QMS-27730\nDate of original registration: 16 March 2023\nValid until: 2027-05-20",
+      "source_file": "D_Harbourline_Packaging_ISO9001.pdf"
+    }
+  ],
+  "usage": [
+    {
+      "model": "claude-sonnet-5-5",
+      "input_tokens": 4,
+      "output_tokens": 222,
+      "cache_write_tokens": 2565,
+      "cache_read_tokens": 0
+    }
+  ],
+  "cost_usd": 0.0086
+}
