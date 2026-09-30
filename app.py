@@ -1,7 +1,7 @@
 import anthropic
 import streamlit as st
 
-MODEL = "claude-opus-5-5"
+MODEL = "claude-sonnet-5-5"
 
 st.title("Aera Compare (setup test)")
 prompt = st.text_area("Message")
