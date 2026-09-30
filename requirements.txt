@@ -3,3 +3,4 @@ anthropic
 pandas
 openpyxl
 python-docx
+pytest
