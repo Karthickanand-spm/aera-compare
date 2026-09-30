@@ -44,7 +44,8 @@ Output per value: `confidence` (high / medium / low) and `confidence_reasons` (l
 - Python 3.12, Streamlit, anthropic SDK, pandas, openpyxl, python-docx, pytest
 - Excel and Word are converted to text in code first. PDFs and images go to Claude directly.
 - Use structured outputs (JSON schema) for extraction so responses are validated JSON.
-- Model name lives in ONE place: `aera/config.py` -> `MODEL = "claude-opus-5-5"`. Same file holds `FX_USD_INR`, `FX_DATE`, `FX_SOURCE`.
+- Model name lives in ONE place: `aera/config.py` -> `MODEL = "claude-sonnet-5-5"`. Same file holds `FX_USD_INR`, `FX_DATE`, `FX_SOURCE`.
+- Claude API rules for this model: do NOT set `temperature`, `top_p`, or `top_k` (non-default values return a 400). Do NOT send `thinking: {"type": "disabled"}` (400); omit `thinking` instead. No assistant-message prefill. No forced `tool_choice` (`any`/`tool`); use structured outputs for JSON.
 - Hosted on Streamlit Community Cloud. Dev machine is Windows; use Command Prompt commands in instructions.
 
 ## Suggested layout
