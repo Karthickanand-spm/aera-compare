@@ -57,12 +57,24 @@ def sha256_bytes(data: bytes) -> str:
 
 def load_reply(path: str | Path) -> Payload:
     path = Path(path)
-    kind = KIND_BY_SUFFIX.get(path.suffix.lower())
+    kind_of(path.name)  # fail on an unsupported type before reading the file
+    return load_reply_bytes(path.name, path.read_bytes())
+
+
+def kind_of(filename: str) -> str:
+    """excel | word | email | pdf | image, from the file extension."""
+    suffix = Path(filename).suffix
+    kind = KIND_BY_SUFFIX.get(suffix.lower())
     if kind is None:
         supported = ", ".join(sorted(KIND_BY_SUFFIX))
-        raise ValueError(f"Unsupported file type '{path.suffix}' for {path.name}. Supported: {supported}")
+        raise ValueError(f"Unsupported file type '{suffix}' for {filename}. Supported: {supported}")
+    return kind
 
-    data = path.read_bytes()
+
+def load_reply_bytes(filename: str, data: bytes) -> Payload:
+    """Same as load_reply, for a file already in memory (e.g. a browser upload)."""
+    path = Path(filename)
+    kind = kind_of(filename)
     digest = sha256_bytes(data)
 
     if kind in ("excel", "word", "email"):

@@ -61,7 +61,7 @@ COMPARISON_COLUMNS = [
     "rfx_line_id", "vendor", "display_name", "description", "raw_price_text", "price_inr_per_piece",
     "label", "included_in_totals", "assumptions", "confidence", "confidence_reasons",
     "source_file", "source_snippet", "page", "quoted_spec", "notes",
-    "needs_review", "buyer_confirmed", "alternatives",
+    "needs_review", "buyer_confirmed", "buyer_decision", "alternatives",
 ]
 
 SUMMARY_COLUMNS = [
@@ -100,6 +100,18 @@ def snippet_in_text(snippet: str | None, text: str | None) -> bool:
     if not snippet or not text:
         return False
     return _squash(snippet) in _squash(text)
+
+
+def find_snippet_span(snippet: str | None, text: str | None) -> tuple[int, int] | None:
+    """(start, end) of the snippet inside the text, ignoring case and runs of whitespace.
+
+    Same matching rule as snippet_in_text, but returns where it is so the UI can highlight it.
+    """
+    if not snippet or not text or not snippet.strip():
+        return None
+    pattern = r"\s+".join(re.escape(word) for word in snippet.split())
+    m = re.search(pattern, text, flags=re.IGNORECASE)
+    return (m.start(), m.end()) if m else None
 
 
 def _first_number(text: str | None) -> float | None:
@@ -230,6 +242,7 @@ def _vendor_rows(rfx, last_year_prices, ext, fx_rates, fx_date, doc_text) -> lis
             "description": rfx_line.description,
             "source_file": ext.get("source_file"),
             "buyer_confirmed": False,
+            "buyer_decision": None,
         }
         if entries:
             row = _quoted_row(entries, rfx_line, last_year_prices, fx_rates, fx_date,
@@ -392,6 +405,101 @@ def _describe(entries: list[dict]) -> str:
     if not entries:
         return "found no price"
     return " / ".join(f"'{e.get('raw_price_text')}'" for e in entries)
+
+
+# ---------- Buyer review decisions ----------
+
+USE_EXTRACTED, USE_ALTERNATIVE, BUYER_EDIT = "extracted", "alternative", "edit"
+
+
+def buyer_decision(choice: str, decided_at: str, alternative_index: int | None = None,
+                   value_inr_per_piece: float | None = None) -> dict:
+    """A buyer's decision on one comparison row. Stored in the UI, applied by apply_buyer_decisions."""
+    if choice not in (USE_EXTRACTED, USE_ALTERNATIVE, BUYER_EDIT):
+        raise ValueError(f"Unknown decision '{choice}'")
+    if choice == USE_ALTERNATIVE and alternative_index is None:
+        raise ValueError("Choosing an alternative needs its index")
+    if choice == BUYER_EDIT and (value_inr_per_piece is None or value_inr_per_piece <= 0):
+        raise ValueError("An edited price must be a positive INR-per-piece value")
+    return {"choice": choice, "decided_at": decided_at, "alternative_index": alternative_index,
+            "value_inr_per_piece": value_inr_per_piece}
+
+
+def apply_buyer_decisions(comparison: pd.DataFrame,
+                          decisions: dict[tuple[int, str], dict] | None) -> pd.DataFrame:
+    """Return a copy of the comparison with the buyer's decisions applied.
+
+    `decisions` maps (rfx_line_id, vendor) -> buyer_decision(...). Each decided row gets
+    buyer_confirmed = True and a plain-English buyer_decision. Choosing an alternative or
+    typing a price is recorded as a visible assumption. A decision that no longer fits
+    its row (e.g. the alternative is gone after re-extraction) is ignored.
+    """
+    out = comparison.copy()
+    for (line_id, vendor), d in (decisions or {}).items():
+        match = out.index[(out["rfx_line_id"] == line_id) & (out["vendor"] == vendor)]
+        if len(match) == 0:
+            continue
+        i = match[0]
+        updated = _decided_row(out.loc[i].to_dict(), d)
+        if updated is not None:
+            for key, value in updated.items():
+                out.at[i, key] = value
+    return out
+
+
+def _decided_row(row: dict, d: dict) -> dict | None:
+    # pandas stores a blank text cell as NaN when other rows in the column have text,
+    # and NaN is truthy. Read blanks back as None before checking anything.
+    row = {k: None if _missing(v) else v for k, v in row.items()}
+    when = d["decided_at"]
+    old_price = row["price_inr_per_piece"]
+    old_price_text = "no price" if _missing(old_price) else f"INR {old_price:.2f} per piece"
+    changes = {"buyer_confirmed": True}
+
+    if d["choice"] == USE_EXTRACTED:
+        changes["buyer_decision"] = f"Buyer confirmed the extracted reading ({when})"
+        changes["confidence_reasons"] = row["confidence_reasons"] + [changes["buyer_decision"]]
+        return changes
+
+    if d["choice"] == USE_ALTERNATIVE:
+        alts = row["alternatives"] or []
+        idx = d.get("alternative_index")
+        if idx is None or not 0 <= idx < len(alts) or alts[idx]["price_inr_per_piece"] is None:
+            return None
+        alt = alts[idx]
+        previous = {
+            "raw_price_text": row["raw_price_text"], "unit_basis": None,
+            "price_inr_per_piece": old_price,
+            "assumptions": [a for a in row["assumptions"] if a != AMBIGUOUS_ASSUMPTION],
+            "source_snippet": row["source_snippet"],
+        }
+        decision = (f"Buyer chose the alternative reading '{alt['raw_price_text']}' "
+                    f"instead of '{row['raw_price_text']}' ({when})")
+        changes.update({
+            "raw_price_text": alt["raw_price_text"],
+            "price_inr_per_piece": alt["price_inr_per_piece"],
+            "source_snippet": alt["source_snippet"],
+            "assumptions": list(alt["assumptions"]) + [decision],
+            "alternatives": [a for j, a in enumerate(alts) if j != idx] + [previous],
+        })
+    else:  # BUYER_EDIT
+        value = float(d["value_inr_per_piece"])
+        decision = (f"Buyer entered INR {value:.2f} per piece by hand ({when}); "
+                    f"extracted reading was {old_price_text}")
+        changes.update({"price_inr_per_piece": value, "assumptions": [decision]})
+
+    label = NOT_COMPARABLE if row["quoted_spec"] else WITH_ASSUMPTION
+    changes.update({
+        "label": label,
+        "included_in_totals": label in COUNTED_LABELS,
+        "buyer_decision": decision,
+        "confidence_reasons": row["confidence_reasons"] + [decision],
+    })
+    return changes
+
+
+def _missing(value) -> bool:
+    return value is None or (isinstance(value, float) and pd.isna(value))
 
 
 # ---------- Quality ----------
@@ -642,7 +750,8 @@ def build_vendor_summary(rfx: RFx, extractions: list[dict], certificates: list[d
             "source_file": ext.get("source_file"),
             "lines_quoted": int((vendor_rows["label"] != NOT_QUOTED).sum()),
             "lines_comparable": int(vendor_rows["label"].isin(COUNTED_LABELS).sum()),
-            "lines_needing_review": int(vendor_rows["needs_review"].sum()),
+            "lines_needing_review": int((vendor_rows["needs_review"]
+                                         & ~vendor_rows["buyer_confirmed"].astype(bool)).sum()),
             "freight": (terms.get("freight") or {}).get("value"),
             "payment_days": (terms.get("payment_days") or {}).get("value"),
             "discounts": [_discount_text(d) for d in terms.get("discounts") or []],
@@ -656,9 +765,11 @@ def build_vendor_summary(rfx: RFx, extractions: list[dict], certificates: list[d
 
 def compare(rfx: RFx, last_year_prices: dict[int, float], extractions: list[dict],
             certificates: list[dict], fx_rates: dict[str, float], fx_date: str | None = None,
-            document_texts: dict[str, str | None] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Returns (comparison, vendor_summary)."""
+            document_texts: dict[str, str | None] | None = None,
+            decisions: dict[tuple[int, str], dict] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Returns (comparison, vendor_summary). `decisions` are the buyer's review choices."""
     comparison = build_comparison(rfx, last_year_prices, extractions, fx_rates, fx_date, document_texts)
+    comparison = apply_buyer_decisions(comparison, decisions)
     summary = build_vendor_summary(rfx, extractions, certificates, comparison)
     return comparison, summary
 

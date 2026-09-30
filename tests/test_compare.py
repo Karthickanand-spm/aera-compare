@@ -10,10 +10,15 @@ from aera.compare import (
     NOT_QUOTED,
     PASS,
     UNCLEAR,
+    BUYER_EDIT,
+    USE_ALTERNATIVE,
+    USE_EXTRACTED,
     WITH_ASSUMPTION,
     add_months,
+    buyer_decision,
     compare,
     display_name,
+    find_snippet_span,
     match_certificate,
     parse_date,
 )
@@ -393,3 +398,123 @@ def test_parse_date_rejects_vague_dates():
 def test_add_months_clamps_month_end():
     assert str(add_months(parse_date("2026-01-31"), 1)) == "2026-02-28"
     assert str(add_months(parse_date("2026-09-16"), 12)) == "2027-09-16"
+
+
+# ---------- Snippet location ----------
+
+def test_find_snippet_span_ignores_case_and_whitespace():
+    text = "Line 1:\n  Rs 5.00   PER piece\nLine 2"
+    start, end = find_snippet_span("rs 5.00 per piece", text)
+    assert text[start:end] == "Rs 5.00   PER piece"
+
+
+def test_find_snippet_span_missing_or_empty():
+    assert find_snippet_span("Rs 9.99", "Rs 5.00") is None
+    assert find_snippet_span("", "Rs 5.00") is None
+    assert find_snippet_span("Rs 5.00", None) is None
+
+
+def test_find_snippet_span_treats_regex_characters_literally():
+    text = "Price (per 100): 450.00 + GST"
+    start, end = find_snippet_span("(per 100): 450.00 +", text)
+    assert text[start:end] == "(per 100): 450.00 +"
+
+
+# ---------- Buyer review decisions ----------
+
+AT = "2026-09-30 10:15"
+
+
+def ambiguous_reply():
+    per_kg = line(1, 38.0, "per_kg", raw="38 for the 3-ply", candidate_group="line-1",
+                  is_ambiguous=True)  # 3.80
+    last_year = line(1, None, "reference_last_year", currency=None, raw="rest same as last year",
+                     candidate_group="line-1", is_ambiguous=True)  # 3.23
+    return reply([per_kg, last_year])
+
+
+def compare_with(decisions):
+    return compare(make_rfx(), {1: 3.23}, [ambiguous_reply()], [], FX, "2026-09-25",
+                   {"acme.eml": "38 for the 3-ply, rest same as last year"}, decisions)
+
+
+def test_no_decision_leaves_row_unconfirmed():
+    df, summary = compare_with(None)
+    r = row_for(df, 1)
+    assert not r["buyer_confirmed"]
+    assert r["buyer_decision"] is None
+    assert summary.iloc[0]["lines_needing_review"] == 1
+
+
+def test_use_extracted_confirms_without_changing_price():
+    df, summary = compare_with({(1, "Acme Boxes"): buyer_decision(USE_EXTRACTED, AT)})
+    r = row_for(df, 1)
+    assert r["buyer_confirmed"]
+    assert r["price_inr_per_piece"] == pytest.approx(3.80)
+    assert AT in r["buyer_decision"]
+    assert r["confidence_reasons"][-1] == r["buyer_decision"]
+    assert r["needs_review"]  # still shown in the review list, now confirmed
+    assert summary.iloc[0]["lines_needing_review"] == 0
+
+
+def test_use_alternative_swaps_price_and_keeps_old_reading_as_alternative():
+    df, _ = compare_with({(1, "Acme Boxes"): buyer_decision(USE_ALTERNATIVE, AT, alternative_index=0)})
+    r = row_for(df, 1)
+    assert r["buyer_confirmed"]
+    assert r["price_inr_per_piece"] == pytest.approx(3.23)
+    assert r["raw_price_text"] == "rest same as last year"
+    assert r["label"] == WITH_ASSUMPTION
+    assert r["included_in_totals"]
+    assert any("alternative reading" in a for a in r["assumptions"])
+    assert AMBIGUOUS_ASSUMPTION not in r["assumptions"]
+    assert [a["price_inr_per_piece"] for a in r["alternatives"]] == [pytest.approx(3.80)]
+
+
+def test_buyer_edit_sets_price_and_records_old_reading():
+    df, _ = compare_with({(1, "Acme Boxes"): buyer_decision(BUYER_EDIT, AT, value_inr_per_piece=3.5)})
+    r = row_for(df, 1)
+    assert r["buyer_confirmed"]
+    assert r["price_inr_per_piece"] == pytest.approx(3.5)
+    assert r["label"] == WITH_ASSUMPTION
+    assert len(r["assumptions"]) == 1
+    assert "3.50" in r["assumptions"][0] and "3.80" in r["assumptions"][0]
+
+
+def test_buyer_edit_on_other_spec_stays_not_comparable():
+    ext = reply([line(1, 5.0, quoted_spec_if_different="150 GSM instead of 180")])
+    df, _ = compare(make_rfx(), {}, [ext], [], FX, "2026-09-25", {"acme.eml": "5.0"},
+                    {(1, "Acme Boxes"): buyer_decision(BUYER_EDIT, AT, value_inr_per_piece=4.0)})
+    r = row_for(df, 1)
+    assert r["label"] == NOT_COMPARABLE
+    assert not r["included_in_totals"]
+
+
+def test_buyer_edit_stays_comparable_when_another_vendor_quoted_other_spec():
+    # A spec text on one vendor's row makes the blank spec on other rows NaN, not None.
+    other = reply([line(1, 5.0, quoted_spec_if_different="150 GSM instead of 180")],
+                  vendor="Other Co", source_file="other.eml")
+    df, _ = compare(make_rfx(), {1: 3.23}, [ambiguous_reply(), other], [], FX, "2026-09-25",
+                    {"acme.eml": "38 for the 3-ply, rest same as last year", "other.eml": "5.0"},
+                    {(1, "Acme Boxes"): buyer_decision(BUYER_EDIT, AT, value_inr_per_piece=3.5),
+                     (2, "Acme Boxes"): buyer_decision(USE_EXTRACTED, AT)})
+    r = df[(df["rfx_line_id"] == 1) & (df["vendor"] == "Acme Boxes")].iloc[0]
+    assert r["label"] == WITH_ASSUMPTION
+    assert r["included_in_totals"]
+
+
+def test_stale_alternative_decision_is_ignored():
+    df, _ = compare_with({(1, "Acme Boxes"): buyer_decision(USE_ALTERNATIVE, AT, alternative_index=5)})
+    r = row_for(df, 1)
+    assert not r["buyer_confirmed"]
+    assert r["price_inr_per_piece"] == pytest.approx(3.80)
+
+
+def test_decision_for_unknown_vendor_is_ignored():
+    df, _ = compare_with({(1, "Nobody"): buyer_decision(USE_EXTRACTED, AT)})
+    assert not df["buyer_confirmed"].any()
+
+
+@pytest.mark.parametrize("value", [None, 0, -1.0])
+def test_buyer_edit_rejects_missing_or_non_positive_price(value):
+    with pytest.raises(ValueError):
+        buyer_decision(BUYER_EDIT, AT, value_inr_per_piece=value)

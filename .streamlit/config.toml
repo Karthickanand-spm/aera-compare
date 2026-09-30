@@ -1,0 +1,3 @@
+[client]
+# Never show a raw traceback in the browser. Errors still print in the terminal.
+showErrorDetails = "none"
