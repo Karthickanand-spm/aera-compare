@@ -1,0 +1,151 @@
+vendor,line_id,raw_value,raw_currency,raw_unit,raw_note,inr_per_piece,expected_label
+A,1,5.93,INR,per piece,incl. GST column shows 7.0,5.93,Comparable
+B,1,5.2,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",5.2,Comparable
+C,1,514,INR,per 100 pcs,,5.14,Comparable with assumption
+D,1,0.057,USD,per piece,,5.39,Comparable with assumption
+E,1,38.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,4.86,Comparable with assumption
+A,2,5.25,INR,per piece,incl. GST column shows 6.19,5.25,Comparable
+B,2,5.04,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",5.04,Comparable
+C,2,494,INR,per 100 pcs,,4.94,Comparable with assumption
+D,2,0.048,USD,per piece,,4.54,Comparable with assumption
+E,2,38.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,4.14,Comparable with assumption
+A,3,8.81,INR,per piece,incl. GST column shows 10.4,8.81,Comparable
+B,3,7.99,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",7.99,Comparable
+C,3,782,INR,per 100 pcs,,7.82,Comparable with assumption
+D,3,0.092,USD,per piece,,8.69,Comparable with assumption
+E,3,38.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,7.22,Comparable with assumption
+A,4,5.85,INR,per piece,incl. GST column shows 6.9,5.85,Comparable
+B,4,5.84,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",5.84,Comparable
+C,4,595,INR,per 100 pcs,,5.95,Comparable with assumption
+D,4,0.065,USD,per piece,,6.14,Comparable with assumption
+E,4,38.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,4.71,Comparable with assumption
+A,5,9.36,INR,per piece,incl. GST column shows 11.04,9.36,Comparable
+B,5,9.64,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",9.64,Comparable
+C,5,945,INR,per 100 pcs,,9.45,Comparable with assumption
+D,5,0.093,USD,per piece,,8.79,Comparable with assumption
+E,5,38.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,8.74,Comparable with assumption
+A,6,10.75,INR,per piece,incl. GST column shows 12.68,10.75,Comparable
+B,6,10.25,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",10.25,Comparable
+C,6,917,INR,per 100 pcs,,9.17,Comparable with assumption
+D,6,0.099,USD,per piece,,9.36,Comparable with assumption
+E,6,38.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,8.51,Comparable with assumption
+A,7,11.17,INR,per piece,incl. GST column shows 13.18,11.17,Comparable
+B,7,9.83,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",9.83,Comparable
+C,7,894,INR,per 100 pcs,,8.94,Comparable with assumption
+D,7,0.1,USD,per piece,,9.45,Comparable with assumption
+E,7,38.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,8.66,Comparable with assumption
+A,8,6.08,INR,per piece,incl. GST column shows 7.17,6.08,Comparable
+B,8,5.68,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",5.68,Comparable
+C,8,555,INR,per 100 pcs,,5.55,Comparable with assumption
+D,8,0.061,USD,per piece,,5.76,Comparable with assumption
+E,8,38.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,4.83,Comparable with assumption
+A,9,8.04,INR,per piece,incl. GST column shows 9.49,8.04,Comparable
+B,9,8.34,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",8.34,Comparable
+C,9,720,INR,per 100 pcs,,7.2,Comparable with assumption
+D,9,0.083,USD,per piece,,7.84,Comparable with assumption
+E,9,38.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,6.99,Comparable with assumption
+A,10,10.52,INR,per piece,incl. GST column shows 12.41,10.52,Comparable
+B,10,9.87,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",9.87,Comparable
+C,10,971,INR,per 100 pcs,,9.71,Comparable with assumption
+D,10,0.104,USD,per piece,,9.83,Comparable with assumption
+E,10,38.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,8.93,Comparable with assumption
+A,11,39.46,INR,per piece,incl. GST column shows 46.56,39.46,Comparable
+B,11,34.35,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",34.35,Comparable
+C,11,3356,INR,per 100 pcs,,33.56,Comparable with assumption
+D,11,0.379,USD,per piece,,35.82,Comparable with assumption
+E,11,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,35.78,Comparable with assumption
+A,12,31.22,INR,per piece,incl. GST column shows 36.84,31.22,Comparable
+B,12,31.06,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",31.06,Comparable
+C,12,2877,INR,per 100 pcs,,28.77,Comparable with assumption
+D,12,0.331,USD,per piece,,31.28,Comparable with assumption
+E,12,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,31.16,Comparable with assumption
+A,13,44.28,INR,per piece,incl. GST column shows 52.25,44.28,Comparable
+B,13,41.1,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",41.1,Comparable
+C,13,3897,INR,per 100 pcs,,38.97,Comparable with assumption
+D,13,0.424,USD,per piece,,40.07,Comparable with assumption
+E,13,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,40.78,Comparable with assumption
+A,14,30.89,INR,per piece,incl. GST column shows 36.45,30.89,Comparable
+B,14,30.95,INR,per piece,offers 150 GSM top liner vs 180 specified,30.95,Not comparable
+C,14,3016,INR,per 100 pcs,,30.16,Comparable with assumption
+D,14,0.335,USD,per piece,,31.66,Comparable with assumption
+E,14,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,29.82,Comparable with assumption
+A,15,62.87,INR,per piece,incl. GST column shows 74.19,62.87,Comparable
+B,15,66.69,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",66.69,Comparable
+C,15,5767,INR,per 100 pcs,,57.67,Comparable with assumption
+D,15,0.668,USD,per piece,,63.13,Comparable with assumption
+E,15,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,63.21,Comparable with assumption
+A,16,58.17,INR,per piece,incl. GST column shows 68.64,58.17,Comparable
+B,16,53.47,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",53.47,Comparable
+C,16,5000,INR,per 100 pcs,,50.0,Comparable with assumption
+D,16,0.57,USD,per piece,,53.86,Comparable with assumption
+E,16,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,51.11,Comparable with assumption
+A,17,62.23,INR,per piece,incl. GST column shows 73.43,62.23,Comparable
+B,17,59.72,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",59.72,Comparable
+C,17,5183,INR,per 100 pcs,,51.83,Comparable with assumption
+D,17,0.56,USD,per piece,,52.92,Comparable with assumption
+E,17,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,56.7,Comparable with assumption
+A,18,33.61,INR,per piece,incl. GST column shows 39.66,33.61,Comparable
+B,18,32.33,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",32.33,Comparable
+C,18,3034,INR,per 100 pcs,,30.34,Comparable with assumption
+D,18,0.38,USD,per piece,,35.91,Comparable with assumption
+E,18,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,32.97,Comparable with assumption
+A,19,51.85,INR,per piece,incl. GST column shows 61.18,51.85,Comparable
+B,19,42.78,INR,per piece,offers 150 GSM top liner vs 180 specified,42.78,Not comparable
+C,19,4603,INR,per 100 pcs,,46.03,Comparable with assumption
+D,19,0.493,USD,per piece,,46.59,Comparable with assumption
+E,19,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,46.87,Comparable with assumption
+A,20,51.74,INR,per piece,incl. GST column shows 61.05,51.74,Comparable
+B,20,46.72,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",46.72,Comparable
+C,20,4288,INR,per 100 pcs,,42.88,Comparable with assumption
+D,20,0.478,USD,per piece,,45.17,Comparable with assumption
+E,20,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,46.49,Comparable with assumption
+A,21,68.63,INR,per piece,incl. GST column shows 80.98,68.63,Comparable
+B,21,63.38,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",63.38,Comparable
+C,21,6326,INR,per 100 pcs,,63.26,Comparable with assumption
+D,21,0.742,USD,per piece,,70.12,Comparable with assumption
+E,21,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,65.44,Comparable with assumption
+A,22,36.91,INR,per piece,incl. GST column shows 43.55,36.91,Comparable
+B,22,34.73,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",34.73,Comparable
+C,22,3719,INR,per 100 pcs,,37.19,Comparable with assumption
+D,22,0.385,USD,per piece,,36.38,Comparable with assumption
+E,22,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,35.11,Comparable with assumption
+A,23,43.72,INR,per piece,incl. GST column shows 51.59,43.72,Comparable
+B,23,42.07,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",42.07,Comparable
+C,23,4028,INR,per 100 pcs,,40.28,Comparable with assumption
+D,23,0.49,USD,per piece,,46.3,Comparable with assumption
+E,23,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,44.14,Comparable with assumption
+A,24,59.72,INR,per piece,incl. GST column shows 70.47,59.72,Comparable
+B,24,54.62,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",54.62,Comparable
+C,24,4874,INR,per 100 pcs,,48.74,Comparable with assumption
+D,24,0.574,USD,per piece,,54.24,Comparable with assumption
+E,24,42.0,INR,per kg,per-kg rate x RFx nominal weight; freight extra,54.14,Comparable with assumption
+A,25,208.91,INR,per piece,incl. GST column shows 246.51,208.91,Comparable
+B,25,,,,7-ply not offered,,Not quoted
+C,25,17858,INR,per 100 pcs,,178.58,Comparable with assumption
+D,25,2.135,USD,per piece,,201.76,Comparable with assumption
+E,25,same as last year,INR,per piece,resolved from last-year contract; freight extra.,185.65,Comparable with assumption
+A,26,137.01,INR,per piece,incl. GST column shows 161.67,137.01,Comparable
+B,26,,,,7-ply not offered,,Not quoted
+C,26,10966,INR,per 100 pcs,,109.66,Comparable with assumption
+D,26,1.376,USD,per piece,,130.03,Comparable with assumption
+E,26,same as last year,INR,per piece,resolved from last-year contract; freight extra.,124.25,Comparable with assumption
+A,27,151.71,INR,per piece,incl. GST column shows 179.02,151.71,Comparable
+B,27,,,,7-ply not offered,,Not quoted
+C,27,13619,INR,per 100 pcs,,136.19,Comparable with assumption
+D,27,1.456,USD,per piece,,137.59,Comparable with assumption
+E,27,same as last year,INR,per piece,resolved from last-year contract; freight extra.,141.41,Comparable with assumption
+A,28,3.45,INR,per piece,incl. GST column shows 4.07,3.45,Comparable
+B,28,3.06,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",3.06,Comparable
+C,28,306,INR,per 100 pcs,,3.06,Comparable with assumption
+D,28,0.86,USD,per box (25 nos),,3.25,Comparable with assumption
+E,28,same as last year,INR,per piece,"resolved from last-year contract; freight extra. AMBIGUOUS: 3-ply board, could be INR 38/kg",3.23,Comparable with assumption
+A,29,24.22,INR,per piece,incl. GST column shows 28.58,24.22,Comparable
+B,29,23.2,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",23.2,Comparable
+C,29,1995,INR,per 100 pcs,,19.95,Comparable with assumption
+D,29,5.79,USD,per box (25 nos),,21.89,Comparable with assumption
+E,29,same as last year,INR,per piece,"resolved from last-year contract; freight extra. AMBIGUOUS: 3-ply board, could be INR 38/kg",21.66,Comparable with assumption
+A,30,3.94,INR,per piece,incl. GST column shows 4.65,3.94,Comparable
+B,30,4.29,INR,per piece,"2.5% discount if annual order value > INR 25 lakh (footnote, conditional)",4.29,Comparable
+C,30,404,INR,per 100 pcs,,4.04,Comparable with assumption
+D,30,1.03,USD,per box (25 nos),,3.89,Comparable with assumption
+E,30,same as last year,INR,per piece,"resolved from last-year contract; freight extra. AMBIGUOUS: 3-ply board, could be INR 38/kg",3.99,Comparable with assumption

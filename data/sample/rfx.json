@@ -1,0 +1,358 @@
+{
+  "rfx_id": "MHA/PKG/2026-27/014",
+  "buyer": "Meridian Home Appliances (fictional), Chakan plant, Pune",
+  "title": "Annual rate contract: corrugated packaging",
+  "issued": "2026-09-16",
+  "due": "2026-09-25",
+  "terms": {
+    "delivery": "Delivered to Chakan plant (FOR destination)",
+    "prices": "INR per piece, ex-GST",
+    "validity": "12 months",
+    "payment": "Vendor to state"
+  },
+  "quality_bar": {
+    "iso9001_valid_on": "2026-09-16",
+    "max_defect_rate_pct": 2.0,
+    "test_report_per_batch": true
+  },
+  "questionnaire": [
+    "Do you hold a valid ISO 9001 certificate? Attach it.",
+    "Monthly converting capacity (tonnes)?",
+    "Standard lead time from PO (days)?",
+    "Defect / rejection rate over the last 12 months (%)?",
+    "Do you supply a test report (burst / BCT) with every batch?",
+    "Payment terms offered (days)?"
+  ],
+  "lines": [
+    {
+      "line_id": 1,
+      "description": "Shipper carton, steam iron",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "310 x 150 x 140 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 73000,
+      "uom": "pcs",
+      "nominal_weight_g": 128
+    },
+    {
+      "line_id": 2,
+      "description": "Shipper carton, dry iron",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "280 x 140 x 130 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 55000,
+      "uom": "pcs",
+      "nominal_weight_g": 109
+    },
+    {
+      "line_id": 3,
+      "description": "Shipper carton, electric kettle 1.5L",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "240 x 200 x 250 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 85000,
+      "uom": "pcs",
+      "nominal_weight_g": 190
+    },
+    {
+      "line_id": 4,
+      "description": "Shipper carton, hair dryer",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "260 x 120 x 220 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 49000,
+      "uom": "pcs",
+      "nominal_weight_g": 124
+    },
+    {
+      "line_id": 5,
+      "description": "Shipper carton, beard trimmer (outer of 10)",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "330 x 240 x 180 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 15000,
+      "uom": "pcs",
+      "nominal_weight_g": 230
+    },
+    {
+      "line_id": 6,
+      "description": "Shipper carton, pop-up toaster",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "320 x 210 x 230 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 43000,
+      "uom": "pcs",
+      "nominal_weight_g": 224
+    },
+    {
+      "line_id": 7,
+      "description": "Shipper carton, sandwich maker",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "300 x 280 x 130 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 37000,
+      "uom": "pcs",
+      "nominal_weight_g": 228
+    },
+    {
+      "line_id": 8,
+      "description": "Shipper carton, hand blender",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "420 x 130 x 110 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 46000,
+      "uom": "pcs",
+      "nominal_weight_g": 127
+    },
+    {
+      "line_id": 9,
+      "description": "Shipper carton, electric lunch box",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "280 x 200 x 200 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 30000,
+      "uom": "pcs",
+      "nominal_weight_g": 184
+    },
+    {
+      "line_id": 10,
+      "description": "Shipper carton, room heater (fan type)",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "300 x 180 x 330 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 24000,
+      "uom": "pcs",
+      "nominal_weight_g": 235
+    },
+    {
+      "line_id": 11,
+      "description": "Shipper carton, mixer grinder 750W",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "450 x 290 x 310 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 110000,
+      "uom": "pcs",
+      "nominal_weight_g": 852
+    },
+    {
+      "line_id": 12,
+      "description": "Shipper carton, mixer grinder 500W",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "420 x 270 x 290 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 79000,
+      "uom": "pcs",
+      "nominal_weight_g": 742
+    },
+    {
+      "line_id": 13,
+      "description": "Shipper carton, juicer mixer grinder",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "480 x 310 x 330 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 37000,
+      "uom": "pcs",
+      "nominal_weight_g": 971
+    },
+    {
+      "line_id": 14,
+      "description": "Shipper carton, induction cooktop",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "420 x 350 x 130 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 67000,
+      "uom": "pcs",
+      "nominal_weight_g": 710
+    },
+    {
+      "line_id": 15,
+      "description": "Shipper carton, OTG 28L",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "560 x 420 x 380 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 22000,
+      "uom": "pcs",
+      "nominal_weight_g": 1505
+    },
+    {
+      "line_id": 16,
+      "description": "Shipper carton, OTG 19L",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "500 x 380 x 340 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 27000,
+      "uom": "pcs",
+      "nominal_weight_g": 1217
+    },
+    {
+      "line_id": 17,
+      "description": "Shipper carton, water purifier RO",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "460 x 330 x 560 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 32000,
+      "uom": "pcs",
+      "nominal_weight_g": 1350
+    },
+    {
+      "line_id": 18,
+      "description": "Shipper carton, ceiling fan 1200mm",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "620 x 250 x 220 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 98000,
+      "uom": "pcs",
+      "nominal_weight_g": 785
+    },
+    {
+      "line_id": 19,
+      "description": "Shipper carton, pedestal fan",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "700 x 320 x 250 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 34000,
+      "uom": "pcs",
+      "nominal_weight_g": 1116
+    },
+    {
+      "line_id": 20,
+      "description": "Shipper carton, wall fan",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "480 x 450 x 170 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 29000,
+      "uom": "pcs",
+      "nominal_weight_g": 1107
+    },
+    {
+      "line_id": 21,
+      "description": "Shipper carton, exhaust fan (outer of 4)",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "520 x 520 x 260 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 7000,
+      "uom": "pcs",
+      "nominal_weight_g": 1558
+    },
+    {
+      "line_id": 22,
+      "description": "Shipper carton, rice cooker 1.8L",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "350 x 320 x 330 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 39000,
+      "uom": "pcs",
+      "nominal_weight_g": 836
+    },
+    {
+      "line_id": 23,
+      "description": "Shipper carton, air fryer 4L",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "400 x 350 x 380 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 44000,
+      "uom": "pcs",
+      "nominal_weight_g": 1051
+    },
+    {
+      "line_id": 24,
+      "description": "Shipper carton, microwave 20L",
+      "ply": "5-ply",
+      "board_spec": "180/150/150/150/180 GSM, BF 20, BC-flute",
+      "size": "520 x 400 x 330 mm (ID)",
+      "print": "2-colour flexo",
+      "annual_qty": 24000,
+      "uom": "pcs",
+      "nominal_weight_g": 1289
+    },
+    {
+      "line_id": 25,
+      "description": "Heavy-duty carton, air cooler 50L",
+      "ply": "7-ply",
+      "board_spec": "200/150/150/150/150/150/200 GSM, BF 22, BCB-flute",
+      "size": "560 x 440 x 1050 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 17000,
+      "uom": "pcs",
+      "nominal_weight_g": 4098
+    },
+    {
+      "line_id": 26,
+      "description": "Heavy-duty carton, storage geyser 25L",
+      "ply": "7-ply",
+      "board_spec": "200/150/150/150/150/150/200 GSM, BF 22, BCB-flute",
+      "size": "480 x 450 x 620 mm (ID)",
+      "print": "1-colour flexo",
+      "annual_qty": 20000,
+      "uom": "pcs",
+      "nominal_weight_g": 2737
+    },
+    {
+      "line_id": 27,
+      "description": "Heavy-duty master carton, microwave (outer of 2)",
+      "ply": "7-ply",
+      "board_spec": "200/150/150/150/150/150/200 GSM, BF 22, BCB-flute",
+      "size": "1060 x 420 x 350 mm (ID)",
+      "print": "Plain",
+      "annual_qty": 6000,
+      "uom": "pcs",
+      "nominal_weight_g": 3134
+    },
+    {
+      "line_id": 28,
+      "description": "Partition set, glass jar (6 cell)",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "300 x 200 x 150 mm (ID)",
+      "print": "Plain",
+      "annual_qty": 37000,
+      "uom": "pcs",
+      "nominal_weight_g": 86
+    },
+    {
+      "line_id": 29,
+      "description": "Layer pad, 1000 x 1200 mm",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "1000 x 1200 mm",
+      "print": "Plain",
+      "annual_qty": 49000,
+      "uom": "pcs",
+      "nominal_weight_g": 576
+    },
+    {
+      "line_id": 30,
+      "description": "Die-cut insert tray, mixer grinder jars",
+      "ply": "3-ply",
+      "board_spec": "150/120/150 GSM, BF 18, B-flute",
+      "size": "430 x 280 x 60 mm (ID)",
+      "print": "Plain",
+      "annual_qty": 110000,
+      "uom": "pcs",
+      "nominal_weight_g": 106
+    }
+  ]
+}

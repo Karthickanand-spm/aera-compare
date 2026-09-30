@@ -1,0 +1,6 @@
+vendor,name,format,iso9001,cert_valid_until,capacity_t_month,lead_time_days,defect_rate_pct,test_report_per_batch,payment_days,freight,quality_result
+A,Deccan Corrupack Pvt Ltd,Excel (own layout),Yes,2027-08-31,600,10,1.2,Yes,45,Delivered Chakan,PASS
+B,Indus Packaging Solutions,PDF on letterhead,Yes,2028-01-15,450,12,0.9,Yes,60,Delivered Chakan,PASS
+C,Sahyadri Boxes & Cartons,Word doc (prose),Yes (claimed),2026-03-15 (EXPIRED),800,7,2.8,Yes,30,Delivered Chakan,FAIL: cert expired; defect rate above 2.0%
+D,Harbourline Packaging (EOU),Angled phone photo of printed rate card,Yes,2027-05-20,300,18,1.6,On request,30,Delivered Chakan,UNCLEAR: test reports only 'on request'
+E,Ganesh Packaging Industries (incumbent),One-line email,Yes,2026-12-31,350,10,1.8,Yes,45,EXTRA (not quoted),PASS
