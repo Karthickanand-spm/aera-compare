@@ -7,7 +7,7 @@ from aera.config import FX_DATE, FX_SOURCE
 from aera.event import add_reply, load_sample_event, reextract_all
 from aera.extract import ExtractionError
 from ui.state import (
-    DECISIONS, DEFAULT_FX_USD, FX_USD, UPLOADS_DONE, fx_is_default, get_event, set_event,
+    API_CALLS, DECISIONS, DEFAULT_FX_USD, FX_USD, UPLOADS_DONE, fx_is_default, get_event, set_event,
 )
 
 UPLOAD_TYPES = ["xlsx", "docx", "pdf", "eml", "jpg", "jpeg", "png"]
@@ -23,6 +23,17 @@ def render_sidebar() -> None:
         _upload()
         st.divider()
         _reextract()
+        st.divider()
+        _api_cost()
+
+
+def _api_cost() -> None:
+    calls = st.session_state[API_CALLS]
+    total = sum(u["cost_usd"] for u in calls)
+    tokens_in = sum(u["input_tokens"] + u["cache_write_tokens"] + u["cache_read_tokens"] for u in calls)
+    tokens_out = sum(u["output_tokens"] for u in calls)
+    st.caption(f"Ask page API cost this session: **~${total:.4f}** "
+               f"({len(calls)} calls, {tokens_in:,} tokens in, {tokens_out:,} out)")
 
 
 def _load_sample() -> None:

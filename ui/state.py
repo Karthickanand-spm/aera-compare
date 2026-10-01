@@ -13,6 +13,8 @@ EVENT = "event"  # aera.event.Event, or None before anything is loaded
 DECISIONS = "decisions"  # {(rfx_line_id, vendor): aera.compare.buyer_decision(...)}
 FX_USD = "fx_usd"  # the USD -> INR rate the buyer is using
 UPLOADS_DONE = "uploads_done"  # file_ids of uploads already processed (so reruns don't re-extract)
+ASK_HISTORY = "ask_history"  # aera.analyst.Answer list, newest first
+API_CALLS = "api_calls"  # usage dicts (tokens + cost_usd) for every Ask call this session
 
 DEFAULT_FX_USD = FX_RATES["USD"]
 
@@ -22,6 +24,8 @@ def init_state() -> None:
     st.session_state.setdefault(DECISIONS, {})
     st.session_state.setdefault(FX_USD, DEFAULT_FX_USD)
     st.session_state.setdefault(UPLOADS_DONE, set())
+    st.session_state.setdefault(ASK_HISTORY, [])
+    st.session_state.setdefault(API_CALLS, [])
 
 
 def get_event() -> Event | None:
