@@ -150,14 +150,13 @@ def empty_state(message: str, button_label: str, on_click: Callable[[], None], k
             st.rerun()  # redraw the whole page, sidebar included, with the result
 
 
-def info_strip(message: str, button_label: str, key: str, icon: str = ":material/info:",
-               on_click: Callable[[], None] | None = None) -> bool:
-    """A slim bordered strip: an icon, one line of text and a button on the right.
+def info_strip(message: str, button_label: str, key: str) -> bool:
+    """A slim bordered strip: an info icon, one line of text and a button on the right.
 
-    Returns True on the run the button is clicked. `on_click` runs before the page redraws."""
+    Returns True on the run the button is clicked."""
     with st.container(border=True, horizontal=True, vertical_alignment="center", key=key):
-        st.markdown(f"{icon} {message}", width="stretch")
-        return st.button(button_label, key=f"{key}_button", width="content", on_click=on_click)
+        st.markdown(f":material/info: {message}", width="stretch")
+        return st.button(button_label, key=f"{key}_button", width="content")
 
 
 def sidebar_section(title: str) -> None:

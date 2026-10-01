@@ -5,7 +5,9 @@ import pandas as pd
 from aera.compare import (
     COMPARABLE, FAIL, HIGH, LOW, MEDIUM, NOT_COMPARABLE, NOT_QUOTED, PASS, WITH_ASSUMPTION,
 )
-from ui.compare_page import cheapest_cells, high_risk_count, lines_with_issues, quote_md, unconfirmed
+from ui.compare_page import (
+    cheapest_cells, conversion_share, high_risks, lines_with_issues, quote_md, short_date, unconfirmed,
+)
 
 
 def _cell(line, vendor, price, label=COMPARABLE, review=False, confirmed=False):
@@ -66,13 +68,27 @@ def test_unconfirmed_counts_only_waiting_values():
     assert unconfirmed(comp).tolist() == [True, False, False]
 
 
-def test_high_risk_count():
+def test_high_risks_list_vendor_and_risk():
     summary = pd.DataFrame([
-        {"vendor": "a", "open_risks": [{"severity": HIGH, "text": "x"}, {"severity": LOW, "text": "y"}]},
-        {"vendor": "b", "open_risks": [{"severity": HIGH, "text": "z"}, {"severity": MEDIUM, "text": "w"}]},
-        {"vendor": "c", "open_risks": []},
+        {"display_name": "Vendor A", "open_risks": [{"severity": HIGH, "text": "x"}, {"severity": LOW, "text": "y"}]},
+        {"display_name": "Vendor B", "open_risks": [{"severity": MEDIUM, "text": "w"}, {"severity": HIGH, "text": "z"}]},
+        {"display_name": "Vendor C", "open_risks": []},
     ])
-    assert high_risk_count(summary) == 2
+    assert high_risks(summary) == ["Vendor A: x", "Vendor B: z"]
+
+
+def test_conversion_share_counts_only_quoted_cells():
+    comp = pd.DataFrame([
+        _cell(1, "a", 1.0, WITH_ASSUMPTION), _cell(1, "b", 1.0, WITH_ASSUMPTION),
+        _cell(1, "c", 1.0), _cell(1, "d", 1.0, NOT_COMPARABLE), _cell(1, "e", None, NOT_QUOTED),
+    ])
+    assert conversion_share(comp) == (2, 4)
+
+
+def test_short_date():
+    assert short_date("2026-09-16") == "16 Sep"
+    assert short_date("2026-10-05") == "5 Oct"
+    assert short_date("end of month") == "end of month"
 
 
 def test_quote_block_quotes_every_line_and_escapes_markdown():

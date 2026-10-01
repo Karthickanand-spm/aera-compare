@@ -5,6 +5,7 @@ worked out in aera/compare.py.
 """
 
 import html
+from datetime import date
 
 import pandas as pd
 import streamlit as st
@@ -16,7 +17,7 @@ from aera.compare import (
 from aera.event import Event
 from aera.normalize import describe_rates
 from aera.ui import (
-    TEAL, badge_md, card, empty_state, info_strip, metric_row, page_header, status_badge, tint,
+    TEAL, badge_md, card, empty_state, metric_row, page_header, status_badge, tint,
 )
 from ui.state import DECISIONS, comparison_tables, fx_settings, get_event, load_sample, md, now_text
 
@@ -25,7 +26,7 @@ LABEL_MARKS = {COMPARABLE: "", WITH_ASSUMPTION: " ≈", NOT_COMPARABLE: " ≠"}
 REVIEW_MARK, CONFIRMED_MARK = "⚠", "✓"
 CARDS_PER_ROW = 5  # one row for a typical event; a sixth vendor starts a new row
 CONTEXT_LINES = 4  # lines shown either side of a highlighted snippet
-REVIEW_PANEL = "review_panel_open"  # session key: is the review expander open?
+REVIEW_PANEL = "review_panel_open"  # session key: are the review items shown under the callout?
 
 # Grid cell styles. Grey text is semi-transparent so it reads in light and dark mode.
 MUTED_TEXT = "color: rgba(128, 128, 128, 0.95); font-style: italic"  # Not comparable
@@ -39,9 +40,14 @@ def page() -> st.Page:
 
 
 def render() -> None:
+    # Tighter spacing than other pages, so the vendor cards and the top of the grid fit on one screen.
+    with st.container(gap="xsmall"):
+        _render()
+
+
+def _render() -> None:
     page_header("Compare", "Every vendor's price side by side, with a clear mark on any number that "
-                "can't be compared like for like.",
-                "confirm the values flagged for review, then ask questions on Ask.")
+                "can't be compared like for like.")
     event = get_event()
     if event is None:
         empty_state("No event loaded yet. Load the sample event to see five vendor replies compared.",
@@ -49,8 +55,8 @@ def render() -> None:
         return
 
     rfx = event.rfx
-    st.markdown(f"**{md(rfx.title)}**")
-    st.caption(f"{rfx.rfx_id} · {rfx.buyer} · issued {rfx.issued} · due {rfx.due}")
+    st.caption(f"{md(rfx.title)} · {md(rfx.rfx_id)} · {md(rfx.buyer)} · "
+               f"issued {short_date(rfx.issued)} · due {short_date(rfx.due)}")
     if not event.replies:
         st.warning("No vendor replies could be read yet. See the sidebar for details.")
         return
@@ -59,10 +65,17 @@ def render() -> None:
     _headline(event, comparison, summary)
     _review_callout(comparison)
     _vendor_cards(event, summary)
-    st.divider()
     _grid(event, comparison, summary)
-    st.divider()
     _inspect(event, comparison)
+
+
+def short_date(text: str) -> str:
+    """'2026-09-16' -> '16 Sep'. Anything that isn't an ISO date is shown as written."""
+    try:
+        d = date.fromisoformat(text)
+    except (TypeError, ValueError):
+        return md(text)
+    return f"{d.day} {d:%b}"
 
 
 # ---------- What the page shows (display choices only; no prices are worked out here) ----------
@@ -72,9 +85,16 @@ def unconfirmed(comparison: pd.DataFrame) -> pd.Series:
     return comparison["needs_review"].astype(bool) & ~comparison["buyer_confirmed"].astype(bool)
 
 
-def high_risk_count(summary: pd.DataFrame) -> int:
-    """Open high-severity risks across every vendor."""
-    return sum(r["severity"] == HIGH for risks in summary["open_risks"] for r in risks)
+def high_risks(summary: pd.DataFrame) -> list[str]:
+    """Every open high-severity risk, as 'Vendor: risk'."""
+    return [f"{s.display_name}: {r['text']}" for s in summary.itertuples(index=False)
+            for r in s.open_risks if r["severity"] == HIGH]
+
+
+def conversion_share(comparison: pd.DataFrame) -> tuple[int, int]:
+    """(cells that needed a conversion, cells the vendors quoted). Not quoted cells are left out."""
+    quoted = comparison["label"] != NOT_QUOTED
+    return int((comparison["label"] == WITH_ASSUMPTION).sum()), int(quoted.sum())
 
 
 def cheapest_cells(comparison: pd.DataFrame, summary: pd.DataFrame) -> set[tuple[int, str]]:
@@ -98,35 +118,46 @@ def lines_with_issues(comparison: pd.DataFrame) -> set[int]:
 
 
 def _headline(event: Event, comparison: pd.DataFrame, summary: pd.DataFrame) -> None:
-    cells = len(comparison)
-    comparable = int(comparison["label"].isin(COUNTED_LABELS).sum())
+    converted, quoted = conversion_share(comparison)
+    risks = high_risks(summary)
     metric_row([
         ("Vendors", len(summary)),
         ("Lines", len(event.rfx.lines)),
-        ("Cells comparable", f"{comparable / cells:.0%}" if cells else "–",
-         f"{comparable} of {cells} line and vendor pairs are Comparable or Comparable with assumption. "
-         "Not comparable and Not quoted cells are left out of totals."),
+        ("Needed a conversion", f"{converted / quoted:.0%}" if quoted else "–",
+         "Per-100, per-kg or currency conversions done in code; every cell shows its conversion."),
         ("Values needing review", int(unconfirmed(comparison).sum()),
-         "Low-confidence values. They count only after you confirm them in the review panel."),
-        ("High risks", high_risk_count(summary), "Open high-severity risks, shown on the vendor cards."),
+         "Low-confidence values. They count only after you confirm them."),
+        ("High risks", len(risks), "\n".join(f"- {md(r)}" for r in risks) or "No open high risks."),
     ])
 
 
 def _review_callout(comparison: pd.DataFrame) -> None:
+    """One box: the review count and a button that opens the review items right underneath."""
     waiting = int(unconfirmed(comparison).sum())
-    if waiting:
-        info_strip(f"**Needs your review ({waiting})**. Low-confidence values don't count until you "
-                   "confirm them.", "Review now", key="review_callout",
-                   icon=":material/warning:", on_click=_open_review_panel)
-    else:
-        st.markdown(":green[:material/check_circle: All values confirmed]")
-    if comparison["needs_review"].astype(bool).any():
-        with st.expander("Review panel", icon=":material/fact_check:", key=REVIEW_PANEL, on_change="rerun"):
+    has_items = comparison["needs_review"].astype(bool).any()
+    is_open = st.session_state.get(REVIEW_PANEL, False)
+    if not waiting:
+        # Confirmed values stay reachable, so a decision can still be undone.
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.markdown(":green[:material/check_circle: All values confirmed]", width="content")
+            if has_items:
+                st.button("Hide decisions" if is_open else "Show decisions", key="review_toggle",
+                          type="tertiary", on_click=_toggle_review_panel)
+        if is_open and has_items:
+            _review_panel(comparison)
+        return
+    with st.container(border=True, key="review_callout"):
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.markdown(f":material/warning: **Needs your review ({waiting})**. Low-confidence values "
+                        "don't count until you confirm them.", width="stretch")
+            st.button("Hide" if is_open else "Review now", key="review_toggle", width="content",
+                      on_click=_toggle_review_panel)
+        if is_open:
             _review_panel(comparison)
 
 
-def _open_review_panel() -> None:
-    st.session_state[REVIEW_PANEL] = True
+def _toggle_review_panel() -> None:
+    st.session_state[REVIEW_PANEL] = not st.session_state.get(REVIEW_PANEL, False)
 
 
 # ---------- Vendor cards ----------
