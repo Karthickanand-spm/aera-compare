@@ -107,6 +107,9 @@ def _show(a: Answer, vendors: dict[str, str]) -> None:
             _chart(a)
         elif a.answer_type == "table" and a.table is not None:
             st.dataframe(display_table(a.table), hide_index=True)
+        for title, extra in a.extra_tables:
+            st.markdown(f"**{md(title)}**")
+            st.dataframe(display_table(extra), hide_index=True)
         for sv in a.sensitivity:
             _freight_table(sv)
 

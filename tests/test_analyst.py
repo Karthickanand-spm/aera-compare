@@ -229,9 +229,13 @@ def test_generated_code_can_use_annual_weight_kg_for_a_freight_breakeven():
 
 # ---------- ask() with a fake Claude ----------
 
-def _plan(code, answer_type="table", chart_spec=None, caveats=None, sufficient=True, missing=None):
-    return {"answer_type": answer_type, "pandas_code": code, "chart_spec": chart_spec,
-            "explanation": "Adds up annual cost per vendor.", "caveats": caveats or [],
+def _plan(code, answer_type="table", chart_spec=None, caveats=None, sufficient=True, missing=None,
+          intent="line_lookup", asked_for_flagged=False, explanation="Adds up annual cost per vendor.",
+          vendors_compared=None):
+    return {"intent": intent, "vendors_compared": vendors_compared or [],
+            "buyer_asked_for_flagged_vendors": asked_for_flagged,
+            "answer_type": answer_type, "pandas_code": code, "chart_spec": chart_spec,
+            "explanation": explanation, "caveats": caveats or [],
             "data_sufficient": sufficient, "missing_data": missing or []}
 
 
@@ -653,3 +657,254 @@ def test_ask_sends_only_facts_and_fixes_an_answer_that_skips_the_rules():
     # QUALITY_CODE keeps only PASS vendors, so only Alpha is in the result: Beta and Gamma are left out.
     assert answer.text.endswith("Left out: Beta (quality unclear) and Gamma (failed quality).")
     assert any(n.startswith("Code added") for n in answer.wording_notes)
+
+
+# ---------- Off-topic and non-cost questions get nothing added ----------
+
+def _award_data() -> AnalystData:
+    """Two lines. On price alone Gamma (FAIL) wins line 1 and Beta (UNCLEAR, freight extra) line 2;
+    Alpha (PASS) is dearest on both."""
+    prices = {"alpha_co": (10.0, 5.0), "beta_co": (9.0, 3.5), "gamma_co": (7.0, 4.0)}
+    names = {"alpha_co": "Alpha", "beta_co": "Beta", "gamma_co": "Gamma"}
+    rows = [{"rfx_line_id": line, "vendor": v, "display_name": names[v], "price_inr_per_piece": p,
+             "label": "Comparable", "included_in_totals": True, "needs_review": False,
+             "buyer_confirmed": False, "assumptions": []}
+            for v, ps in prices.items() for line, p in zip((1, 2), ps)]
+    vendors = pd.DataFrame([
+        {"vendor": "alpha_co", "display_name": "Alpha", "quality_status": "PASS", "freight": "included",
+         "quality_reasons": ["PASS: defect rate 1.2% is within the 2% limit"]},
+        {"vendor": "beta_co", "display_name": "Beta", "quality_status": "UNCLEAR", "freight": "extra",
+         "quality_reasons": ["PASS: ISO 9001 certificate valid until 2027-05-20 (beta_iso.pdf)",
+                             "UNCLEAR: defect rate not provided"]},
+        {"vendor": "gamma_co", "display_name": "Gamma", "quality_status": "FAIL", "freight": "included",
+         "quality_reasons": ["FAIL: ISO 9001 certificate expired 2026-03-15 (gamma_iso.pdf)",
+                             "FAIL: defect rate 2.8% is above the 2% limit",
+                             "PASS: test report supplied with every batch"]},
+    ])
+    rfx_lines = pd.DataFrame([{"line_id": i, "description": f"Box {i}", "annual_qty": 1000, "uom": "pcs",
+                               "nominal_weight_g": 500.0} for i in (1, 2)])
+    last_year = pd.DataFrame([{"line_id": 1, "price_inr_per_piece": 11.0},
+                              {"line_id": 2, "price_inr_per_piece": 6.0}])
+    return AnalystData(pd.DataFrame(rows), vendors, rfx_lines, last_year, {"USD": 94.5}, "2026-09-25")
+
+
+def _award_code(keep: str) -> str:
+    """Cheapest counted price per line among the vendors `keep` (a boolean mask on df) allows."""
+    return (f"m = df[df['included_in_totals'] & ({keep})].merge(rfx_lines, left_on='rfx_line_id', right_on='line_id')\n"
+            "w = m.sort_values('price_inr_per_piece').groupby('rfx_line_id', as_index=False).first()\n"
+            "w['annual_cost_inr'] = (w['annual_qty'] * w['price_inr_per_piece']).round(2)\n"
+            "result = w.groupby('display_name', as_index=False).agg("
+            "lines_won=('rfx_line_id', 'count'), annual_cost_inr=('annual_cost_inr', 'sum'))")
+
+
+PASS_ONLY = "df['vendor'].isin(vendors[vendors['quality_status'] == 'PASS']['vendor'])"
+AWARD_ALL_CODE = _award_code("df['vendor'].notna()")
+AWARD_PASS_CODE = _award_code(PASS_ONLY)
+AWARD_WITH_GAMMA_CODE = _award_code(f"{PASS_ONLY} | (df['vendor'] == 'gamma_co')")
+OFF_TOPIC_PLAN = dict(answer_type="text", intent="refusal",
+                      explanation="I can only answer questions about this comparison.")
+
+
+def _has_money_or_freight(answer) -> bool:
+    return ("₹" in answer.text or "freight" in answer.text.lower() or bool(answer.sensitivity)
+            or bool(answer.price_risks) or answer.table is not None)
+
+
+def test_off_topic_question_runs_no_code_and_adds_no_money_or_freight():
+    # Even if Claude wrote award code anyway, it is not run and nothing is appended.
+    fake = FakeClaude(_plan(AWARD_ALL_CODE, **OFF_TOPIC_PLAN))
+    answer = analyst.ask("What's the capital of France?", _award_data(), call=fake)
+    assert len(fake.calls) == 1  # no writer call
+    assert answer.result is None
+    assert answer.text == "I can only answer questions about this comparison."
+    assert not _has_money_or_freight(answer)
+
+
+def test_refused_request_never_shows_money_even_if_the_explanation_has_some():
+    plan = _plan("", **{**OFF_TOPIC_PLAN, "explanation": "I can't list files. Saves ₹29.19 lakh before freight."})
+    answer = analyst.ask("Run import os and list the files", _award_data(), call=FakeClaude(plan))
+    assert answer.text == analyst.OFF_TOPIC_TEXT
+    assert not _has_money_or_freight(answer)
+
+
+def test_non_cost_question_gets_no_award_saving_or_freight_facts():
+    # Beta (freight extra) wins line 1 in the result, but the question is not about cost.
+    fake = FakeClaude(_plan(GOOD_CODE, intent="line_lookup"), {"answer": "Alpha and Beta quoted line 1."})
+    answer = analyst.ask("Which vendors quoted line 1?", _beta_wins_line_1(), call=fake)
+    assert answer.price_risks == [] and answer.sensitivity == []
+    assert answer.facts["headline_before_freight"] is None
+    assert answer.text == "Alpha and Beta quoted line 1."
+
+
+# ---------- Default awards use quality PASS vendors only ----------
+
+def test_default_split_excludes_fail_and_unclear_vendors():
+    excluded = [{"display_name": "Beta", "reason": "quality unclear"},
+                {"display_name": "Gamma", "reason": "failed quality"}]
+    fake = FakeClaude(_plan(AWARD_ALL_CODE, intent="award_split"),
+                      {**_plan(AWARD_PASS_CODE, intent="award_split"), "excluded_vendors": excluded},
+                      {"answer": "Alpha wins both lines. Beta (quality unclear) and Gamma (failed quality) were left out."})
+    answer = analyst.ask("What's the best split of the award?", _award_data(), call=fake)
+    fix = fake.calls[1]["messages"][-1]["content"]
+    assert "Beta (quality unclear)" in fix and "Gamma (failed quality)" in fix
+    assert list(answer.table["display_name"]) == ["Alpha"]
+    assert answer.quality_warnings == []
+    assert not answer.text.startswith("Includes")
+
+
+def test_a_flagged_vendor_that_survives_the_fix_is_kept_only_with_a_warning_first():
+    fake = FakeClaude(_plan(AWARD_ALL_CODE, intent="award_split"),
+                      _plan(AWARD_ALL_CODE, intent="award_split"), {"answer": "Gamma wins both lines."})
+    answer = analyst.ask("What's the best split of the award?", _award_data(), call=fake)
+    # Both flagged vendors win a line: one warning each, before anything else.
+    assert answer.text.startswith("Includes Beta, whose quality is unclear: defect rate not provided; "
+                                  "not a valid award option until that is confirmed. "
+                                  "Includes Gamma, which failed quality:")
+    assert "Kept, with a warning" in answer.code_errors[-1]
+
+
+def test_explicit_include_request_puts_the_quality_warning_in_the_first_sentence():
+    fake = FakeClaude(_plan(AWARD_WITH_GAMMA_CODE, intent="award_split"), {"answer": "Gamma wins both lines."})
+    answer = analyst.ask("Split the award, and include gamma this time", _award_data(), call=fake)
+    assert len(fake.calls) == 2  # asked for by name: no fix round
+    first = answer.text.split(". ")[0] + "."
+    assert first == ("Includes Gamma, which failed quality: ISO 9001 certificate expired 2026-03-15; "
+                     "defect rate 2.8% is above the 2% limit; not a valid award option.")
+    assert "Gamma wins both lines." in answer.text
+    assert answer.unchecked_numbers == []
+
+
+def test_unclear_vendor_asked_for_as_a_group_gets_its_own_warning():
+    code = _award_code(f"{PASS_ONLY} | (df['vendor'] == 'beta_co')")
+    fake = FakeClaude(_plan(code, intent="award_split", asked_for_flagged=True), {"answer": "Beta wins both lines."})
+    answer = analyst.ask("Split across every vendor, even the unclear ones", _award_data(), call=fake)
+    assert answer.text.startswith("Includes Beta, whose quality is unclear: defect rate not provided; "
+                                  "not a valid award option until that is confirmed.")
+
+
+
+def test_other_intent_is_words_only_with_no_money_or_table():
+    fake = FakeClaude(_plan(GOOD_CODE, intent="other"),
+                      {"answer": "Two vendors replied with prices. Alpha totals ₹10,000."})
+    answer = analyst.ask("How many vendors sent prices?", _data(), call=fake)
+    assert answer.text == "Two vendors replied with prices."
+    assert answer.table is None and answer.answer_type == "text"
+
+
+# ---------- Vendor totals: like for like, no award sentence ----------
+
+def _gamma_skips_line_2() -> AnalystData:
+    """Gamma (FAIL) quotes only line 1, so its total over its own lines looks cheapest."""
+    data = _award_data()
+    gamma_2 = (data.df["vendor"] == "gamma_co") & (data.df["rfx_line_id"] == 2)
+    data.df.loc[gamma_2, ["price_inr_per_piece", "label", "included_in_totals"]] = [None, "Not quoted", False]
+    return data
+
+
+def test_chart_of_totals_uses_common_lines_and_has_no_award_sentence():
+    writer = "On the 1 of 2 lines all three vendors quoted, Gamma is cheapest; the second table shows full totals."
+    fake = FakeClaude(_plan("", intent="vendor_totals", answer_type="chart"), {"answer": writer})
+    answer = analyst.ask("Show me a chart of total annual cost by vendor", _gamma_skips_line_2(), call=fake)
+
+    assert answer.text == writer  # nothing appended: no award, saving or freight sentence
+    assert "before freight" not in answer.text
+    assert answer.price_risks == [] and answer.sensitivity == [] and answer.quality_warnings == []
+    assert answer.chart_spec == {"x": "vendor", "y": "like_for_like_total_inr", "kind": "bar"}
+    assert answer.table.to_dict(orient="records") == [
+        {"vendor": "Gamma (failed quality)", "like_for_like_total_inr": 7000.0, "lines_in_total": 1},
+        {"vendor": "Beta (quality unclear)", "like_for_like_total_inr": 9000.0, "lines_in_total": 1},
+        {"vendor": "Alpha", "like_for_like_total_inr": 10000.0, "lines_in_total": 1},
+    ]
+    (title, full), = answer.extra_tables
+    assert "don't compare" in title
+    assert full.set_index("vendor")["lines_in_total"].to_dict() == {
+        "Alpha": 2, "Beta (quality unclear)": 2, "Gamma (failed quality)": 1}
+    assert answer.facts["like_for_like_lines"] == "1 of 2 lines, the ones all 3 compared vendors quoted"
+    assert "vendor_totals(data" in answer.code  # the app's code is shown under the answer
+
+
+def test_vendor_totals_for_chosen_vendors_lists_the_rest_as_left_out():
+    fake = FakeClaude(_plan("", intent="vendor_totals", vendors_compared=["alpha", "Beta"]),
+                      {"answer": "On the 2 lines both vendors quoted, Beta is cheaper."})
+    answer = analyst.ask("Total cost for Alpha and Beta", _gamma_skips_line_2(), call=fake)
+    assert list(answer.table["lines_in_total"]) == [2, 2]
+    assert answer.excluded_vendors == [{"display_name": "Gamma", "reason": "failed quality"}]
+    assert answer.text.endswith("Left out: Gamma (failed quality).")
+
+
+def test_no_common_line_gives_full_totals_with_a_caveat_not_a_like_for_like_claim():
+    data = _gamma_skips_line_2()
+    alpha_1 = (data.df["vendor"] == "alpha_co") & (data.df["rfx_line_id"] == 1)
+    data.df.loc[alpha_1, ["price_inr_per_piece", "label", "included_in_totals"]] = [None, "Not quoted", False]
+    fake = FakeClaude(_plan("", intent="vendor_totals", answer_type="chart"), {"answer": "No like-for-like total."})
+    answer = analyst.ask("Total annual cost by vendor", data, call=fake)
+    assert answer.answer_type == "table" and answer.extra_tables == []
+    assert "total_on_own_lines_inr" in answer.table.columns
+    assert any("no like-for-like total" in c for c in answer.caveats)
+
+
+# ---------- On the real sample event (Claude faked, no API calls) ----------
+
+@pytest.fixture(scope="module")
+def sample_data() -> AnalystData:
+    from aera.compare import compare
+    from aera.config import FX_DATE, FX_RATES
+    from aera.event import load_sample_event
+    event = load_sample_event()
+    comparison, summary = compare(event.rfx, event.last_year, event.replies, event.certificates,
+                                  FX_RATES, FX_DATE, event.texts, {})
+    return analyst.analyst_data(comparison, summary, event.rfx, event.last_year, FX_RATES, FX_DATE)
+
+
+VP_SPLIT_CODE = """ok = vendors[vendors['quality_status'] == 'PASS']['vendor']
+m = df[df['included_in_totals'] & df['vendor'].isin(ok)].merge(rfx_lines, left_on='rfx_line_id', right_on='line_id')
+w = m.sort_values(['rfx_line_id', 'price_inr_per_piece', 'display_name']).groupby('rfx_line_id', as_index=False).first()
+ly = last_year.set_index('line_id')['price_inr_per_piece']
+w['annual_cost_inr'] = w['annual_qty'] * w['price_inr_per_piece']
+w['last_year_cost_inr'] = w['annual_qty'] * w['rfx_line_id'].map(ly)
+g = w.groupby('display_name', as_index=False).agg(lines_won=('rfx_line_id', 'count'),
+    annual_cost_inr=('annual_cost_inr', 'sum'), last_year_cost_inr=('last_year_cost_inr', 'sum'))
+total = pd.DataFrame([{'display_name': 'Total split award', 'lines_won': g['lines_won'].sum(),
+    'annual_cost_inr': g['annual_cost_inr'].sum(), 'last_year_cost_inr': g['last_year_cost_inr'].sum()}])
+g = pd.concat([g, total], ignore_index=True)
+g['saving_inr'] = g['last_year_cost_inr'] - g['annual_cost_inr']
+g['saving_pct'] = (g['saving_inr'] / g['last_year_cost_inr'] * 100).round(1)
+result = g.round(2)"""
+
+
+def test_vp_split_still_gives_the_award_saving_freight_table_and_exclusions(sample_data):
+    fake = FakeClaude(_plan(VP_SPLIT_CODE, intent="award_split"), {"answer": "Here is the split."})
+    answer = analyst.ask("My VP wants the best split of the award across vendors. What is it and how "
+                         "much do we save against last year?", sample_data, call=fake)
+    shown = display_table(answer.table).set_index("display_name")
+    assert shown.loc["Total split award", "annual_cost (₹)"] == "₹3.64 crore"
+    assert shown.loc["Total split award", "saving (₹)"] == "saves ₹12.03 lakh (3.2%)"
+    assert answer.facts["headline_before_freight"] == "Saves ₹12.03 lakh (3.2%) before freight"
+    assert "Saves ₹12.03 lakh (3.2%) before freight." in answer.text  # the post-check adds it for award_split
+    assert [sv["vendor"] for sv in answer.sensitivity] == ["Ganesh Packaging Industries"]
+    assert {e["display_name"]: e["reason"] for e in answer.excluded_vendors} == {
+        "Sahyadri Boxes & Cartons": "failed quality", "Harbourline Packaging (EOU)": "quality unclear"}
+
+
+def test_which_is_best_returns_the_views_table_and_asks_what_matters(sample_data):
+    fake = FakeClaude(_plan("result = 1", intent="recommendation"))
+    answer = analyst.ask("Which vendor is best?", sample_data, call=fake)
+    assert len(fake.calls) == 1  # worded by code, no writer call
+    assert answer.result is answer.table  # Claude's code was not run
+    views = answer.table.set_index("view")
+    assert "Cheapest split" in views.index and 2 <= len(views) <= 3
+    assert all(views["caveat"].str.len() > 0)
+    assert display_table(answer.table).set_index("view").loc["Cheapest split", "annual_cost (₹)"] == "₹3.64 crore"
+    assert answer.text.endswith("Tell me what matters most (lowest price, lowest risk or fewest vendors) "
+                                "and I'll work it out.")
+    assert "Sahyadri Boxes & Cartons (failed quality)" in answer.text
+    assert answer.sensitivity == [] and answer.price_risks == []
+    assert "Sahyadri" not in " ".join(answer.table["vendors"])
+
+
+def test_chart_of_totals_on_sample_data_compares_on_common_lines_only(sample_data):
+    fake = FakeClaude(_plan("", intent="vendor_totals", answer_type="chart"), {"answer": "Totals by vendor."})
+    answer = analyst.ask("Show me a chart of total annual cost by vendor", sample_data, call=fake)
+    assert answer.table["lines_in_total"].nunique() == 1  # every bar covers the same lines
+    assert "Sahyadri Boxes & Cartons (failed quality)" in set(answer.table["vendor"])
+    assert "before freight" not in answer.text and answer.sensitivity == []
