@@ -1,3 +1,21 @@
 [client]
 # Never show a raw traceback in the browser. Errors still print in the terminal.
 showErrorDetails = "none"
+
+# Clean theme for the whole app: deep teal accent, default sans-serif font.
+# Light and dark are both set, so the app follows the browser's mode and text stays readable in each.
+[theme]
+font = "sans-serif"
+
+[theme.light]
+primaryColor = "#0F766E"
+backgroundColor = "#F8FAFB"
+secondaryBackgroundColor = "#EEF3F2"
+textColor = "#0F172A"
+
+[theme.dark]
+# Same teal in dark mode: buttons put white text on it, which a lighter teal would wash out.
+primaryColor = "#0F766E"
+backgroundColor = "#0E1416"
+secondaryBackgroundColor = "#1A2326"
+textColor = "#E5ECEB"

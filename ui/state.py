@@ -8,6 +8,7 @@ import streamlit as st
 from aera.compare import compare
 from aera.config import FX_DATE, FX_RATES, FX_SOURCE
 from aera.event import Event
+from aera.rfx_builder import empty_draft
 
 EVENT = "event"  # aera.event.Event, or None before anything is loaded
 DECISIONS = "decisions"  # {(rfx_line_id, vendor): aera.compare.buyer_decision(...)}
@@ -20,6 +21,10 @@ CLARIFY_DRAFTS = "clarify_drafts"  # {vendor: aera.clarify.Draft}
 CLARIFY_EXTRA = "clarify_extra"  # {vendor: [analyst missing-data text]} sent over from the Ask page
 CLARIFY_FOCUS = "clarify_focus"  # vendor to show first on the Clarify page, or None
 SENT_LOG = "sent_log"  # [{"Vendor", "Time", "Subject"}] for simulated sends
+RFX_CHAT = "rfx_chat"  # Create RFx chat: [{"role", "content", "notes"}]
+RFX_DRAFT = "rfx_draft"  # the draft RFx being built (aera.rfx_builder.empty_draft() shape)
+RFX_TABLE_VERSION = "rfx_table_version"  # bumped when Claude updates the draft, so the table resets
+RFX_SENT_LOG = "rfx_sent_log"  # [{"Vendor", "Email", "Time", "Status"}] for the simulated RFx send
 
 DEFAULT_FX_USD = FX_RATES["USD"]
 
@@ -36,6 +41,10 @@ def init_state() -> None:
     st.session_state.setdefault(CLARIFY_EXTRA, {})
     st.session_state.setdefault(CLARIFY_FOCUS, None)
     st.session_state.setdefault(SENT_LOG, [])
+    st.session_state.setdefault(RFX_CHAT, [])
+    st.session_state.setdefault(RFX_DRAFT, empty_draft())
+    st.session_state.setdefault(RFX_TABLE_VERSION, 0)
+    st.session_state.setdefault(RFX_SENT_LOG, [])
 
 
 def get_event() -> Event | None:

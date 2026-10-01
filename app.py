@@ -6,7 +6,7 @@ Run with:  streamlit run app.py
 import streamlit as st
 
 from aera.extract import ExtractionError
-from ui import ask_page, clarify_page, compare_page, decide_page
+from ui import ask_page, clarify_page, compare_page, create_page, decide_page
 from ui.sidebar import render_sidebar
 from ui.state import init_state
 
@@ -16,6 +16,7 @@ st.set_page_config(page_title="Aera Compare", layout="wide")
 init_state()
 
 pages = [
+    st.Page(create_page.render, title="Create RFx", url_path="create"),
     st.Page(compare_page.render, title="Compare", url_path="compare", default=True),
     st.Page(ask_page.render, title="Ask", url_path="ask"),
     st.Page(decide_page.render, title="Decide", url_path="decide"),
