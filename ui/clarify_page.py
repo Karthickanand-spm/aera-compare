@@ -24,7 +24,7 @@ URL_PATH = "clarify"
 
 def page() -> st.Page:
     """The navigation entry. Built here so the Ask page can switch to the same page."""
-    return st.Page(render, title="Clarify", url_path=URL_PATH)
+    return st.Page(render, title="Clarify", url_path=URL_PATH, icon=":material/mail:")
 
 
 def open_for(vendor: str, missing: list[str]) -> None:

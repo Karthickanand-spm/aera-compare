@@ -47,7 +47,7 @@ def _api_cost() -> None:
     total = sum(u["cost_usd"] for u in calls)
     tokens_in = sum(u["input_tokens"] + u["cache_write_tokens"] + u["cache_read_tokens"] for u in calls)
     tokens_out = sum(u["output_tokens"] for u in calls)
-    st.markdown(f"API cost so far: **~${total:.4f}**")
+    st.caption(f"API cost so far: **~${total:.4f}**")
     st.caption(f"Create RFx, Ask and Clarify · {len(calls)} calls · {tokens_in:,} tokens in, {tokens_out:,} out")
 
 
@@ -70,11 +70,17 @@ def _fx_input() -> None:
     st.number_input("USD to INR rate", min_value=0.01, step=0.25, format="%.2f", key=FX_USD,
                     help="Used for every USD price. Changing it recomputes the comparison.")
     if fx_is_default():
-        st.caption(f"{FX_SOURCE} · dated {FX_DATE} · not a live market rate")
+        st.caption(f"{FX_SOURCE} · {_nice_date(FX_DATE)}")
     else:
         st.caption(f"Entered by you (default {DEFAULT_FX_USD:.2f}, {FX_SOURCE.lower()} dated {FX_DATE}). "
                    "Assumptions now say it was entered by you.")
         st.button("Reset to default rate", on_click=_reset_fx)
+
+
+def _nice_date(iso: str) -> str:
+    """'2026-09-25' -> '25 Sep 2026'."""
+    d = date.fromisoformat(iso)
+    return f"{d.day} {d:%b %Y}"
 
 
 def _extra_fx_inputs() -> None:
@@ -169,7 +175,7 @@ def _reextract() -> None:
                f"the cache. It costs API credit (about ${event.extraction_cost_usd:.2f} last "
                "time) and clears your review decisions.")
     sure = st.checkbox("I understand this uses API credit")
-    if st.button("Re-extract all", disabled=not sure, width="stretch"):
+    if st.button("Re-extract all", disabled=not sure, icon=":material/refresh:"):
         with st.status("Re-extracting every file...", expanded=True) as status:
             fresh = reextract_all(event, progress=status.write)
             status.update(label="Re-extraction finished", state="complete")

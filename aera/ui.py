@@ -41,7 +41,17 @@ _STYLES = f"""
 /* Tighter page spacing than Streamlit's default. 4rem top clears the toolbar so the stepper is never clipped. */
 [data-testid="stMainBlockContainer"] {{ padding-top: 4rem; padding-bottom: 2rem; }}
 [data-testid="stSidebarUserContent"] {{ padding-top: 0.5rem; }}
-[data-testid="stSidebarUserContent"] hr {{ margin: 0.75rem 0; }}
+[data-testid="stSidebarUserContent"] hr {{ margin: 1rem 0 0.75rem 0; }}
+
+/* Sidebar: small grey line under the logo (the nav sits directly below the logo), and small uppercase
+   grey labels for the nav section and each control group. Semi-transparent grey reads in light and dark. */
+[data-testid="stSidebarNav"]::before {{ content: "Concept prototype"; display: block; margin: -1rem 0 1rem 0;
+  font-size: 0.8rem; color: rgba(128, 128, 128, 0.95); }}
+/* Each sidebar group draws its own divider, so Streamlit's line under the menu would double up. */
+[data-testid="stSidebarNavSeparator"] {{ display: none; }}
+.aera-side-label, [data-testid="stNavSectionHeader"] {{ font-size: 0.75rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em; color: rgba(128, 128, 128, 0.95); }}
+.aera-side-label {{ margin: 0 0 0.25rem 0; }}
 
 /* Workflow stepper. Text inherits the theme colour, so it reads well in light and dark mode.
    The stHtml prefix outranks Streamlit's own list indent, so the first step lines up with the title. */
@@ -197,13 +207,15 @@ def watch_box(key: str, expanded: bool = False):
 
 
 def sidebar_section(title: str) -> None:
-    """A labelled group in the sidebar."""
-    st.subheader(title, anchor=False)
+    """A labelled group in the sidebar: small uppercase grey label with its icon."""
+    icon = SIDEBAR_ICONS.get(title, "")
+    st.html(f'<div class="aera-side-label">{icon} {html.escape(title)}</div>')
 
 
 # ---------- Sidebar per page ----------
 
 SIDEBAR_SECTIONS = ("Event", "Assumptions", "Session")
+SIDEBAR_ICONS = {"Event": "📂", "Assumptions": "⚙️", "Session": "📊"}
 # Pages where the buyer is still writing the RFx: no event or FX rates to show yet.
 SETUP_PAGES = ("Start here", "Create RFx")
 SETUP_SIDEBAR_NOTE = "Vendor replies come in on the Compare page."
@@ -220,9 +232,7 @@ def render_sidebar(page: str, draw: dict[str, Callable[[], None]]) -> None:
     with st.sidebar:
         if "Event" not in shown:
             st.caption(SETUP_SIDEBAR_NOTE)
-            st.divider()
-        for i, name in enumerate(shown):
-            if i:
-                st.divider()
+        for name in shown:
+            st.divider()  # every group starts with a line, which also separates the first from the menu
             sidebar_section(name)
             draw[name]()

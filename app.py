@@ -15,14 +15,17 @@ FOOTER = "Concept prototype. Not an Aerchain product."
 st.set_page_config(page_title="Aera Compare", layout="wide")
 init_state()
 apply_styles()
+# Wordmark at the top of the sidebar; the small square icon shows when the sidebar is collapsed.
+st.logo("assets/logo.svg", icon_image="assets/icon.svg", size="large")
 
-pages = [
-    st.Page(create_page.render, title="Create RFx", url_path="create"),
+# One "Workflow" section, so Streamlit draws the pages as a menu with the current page highlighted.
+pages = {"Workflow": [
+    st.Page(create_page.render, title="Create RFx", url_path="create", icon=":material/edit_note:"),
     compare_page.page(),
-    st.Page(ask_page.render, title="Ask", url_path="ask"),
-    st.Page(decide_page.render, title="Decide", url_path="decide"),
+    st.Page(ask_page.render, title="Ask", url_path="ask", icon=":material/forum:"),
+    st.Page(decide_page.render, title="Decide", url_path="decide", icon=":material/gavel:"),
     clarify_page.page(),
-]
+]}
 page = st.navigation(pages)
 
 # Filled after the page runs, so a step finished on this click is ticked straight away.

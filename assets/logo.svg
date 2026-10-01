@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40" role="img" aria-label="Aera Compare">
+  <!-- Wordmark text follows the browser's light/dark mode, so it stays readable on either sidebar. -->
+  <style>
+    .name { fill: #0F172A; }
+    @media (prefers-color-scheme: dark) { .name { fill: #E5ECEB; } }
+  </style>
+  <rect x="2" y="2" width="36" height="36" rx="8" fill="#0F766E"/>
+  <text x="20" y="26" text-anchor="middle" fill="#FFFFFF" font-family="Segoe UI, Helvetica, Arial, sans-serif"
+        font-size="16" font-weight="700" letter-spacing="0.5">AC</text>
+  <text class="name" x="48" y="27" font-family="Segoe UI, Helvetica, Arial, sans-serif"
+        font-size="20" font-weight="600">Aera Compare</text>
+</svg>

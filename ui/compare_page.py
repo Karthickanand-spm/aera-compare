@@ -36,7 +36,7 @@ CHEAPEST = f"font-weight: 700; background-color: {TEAL}2E"  # TEAL at ~18% opaci
 
 def page() -> st.Page:
     """The navigation entry. Built here so other pages can switch to the same page."""
-    return st.Page(render, title="Compare", url_path="compare", default=True)
+    return st.Page(render, title="Compare", url_path="compare", default=True, icon=":material/table_chart:")
 
 
 def render() -> None:
