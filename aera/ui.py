@@ -5,6 +5,7 @@ aera/compare.py and aera/award.py. One colour table below keeps badges the same 
 """
 
 import html
+import re
 from collections.abc import Callable, Iterable
 
 import streamlit as st
@@ -55,6 +56,10 @@ _STYLES = f"""
 .aera-step.current .aera-dot {{ border-color: #fff; }}
 .aera-step.current.done .aera-dot {{ background: #fff; color: {TEAL}; }}
 .aera-sep {{ width: 1rem; height: 1px; background: rgba(128, 128, 128, 0.5); }}
+
+/* "What to watch" expander under an answer: amber edge and tint, theme text colour on top. */
+[class*="st-key-aera-watch"] details {{ border-color: rgba(245, 158, 11, 0.7);
+  background: {TINTS["orange"]}; }}
 </style>
 """
 
@@ -157,6 +162,33 @@ def info_strip(message: str, button_label: str, key: str) -> bool:
     with st.container(border=True, horizontal=True, vertical_alignment="center", key=key):
         st.markdown(f":material/info: {message}", width="stretch")
         return st.button(button_label, key=f"{key}_button", width="content")
+
+
+# ---------- Answer cards ----------
+
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+|
+")
+_HIGH_RISK = re.compile(r"high[- ]?(severity|risk)|HIGH", re.IGNORECASE)
+
+
+def split_headline(text: str) -> tuple[str, str]:
+    """(first sentence, the rest). The first sentence stops at a full stop, ? or ! followed by
+    a space, or at the first line break. Decimals like 1.5 don't end it."""
+    text = (text or "").strip()
+    end = _SENTENCE_END.search(text)
+    if not end:
+        return text, ""
+    return text[:end.start()].strip(), text[end.end():].strip()
+
+
+def has_high_risk(caveats: Iterable[str]) -> bool:
+    """True if any caveat talks about a high-severity / HIGH risk."""
+    return any(_HIGH_RISK.search(c or "") for c in caveats)
+
+
+def watch_box(key: str, expanded: bool = False):
+    """The amber "What to watch" expander for an answer's caveats. Use as `with watch_box(...):`."""
+    return st.expander("What to watch", expanded=expanded, icon=":material/warning:", key=f"aera-watch-{key}")
 
 
 def sidebar_section(title: str) -> None:
