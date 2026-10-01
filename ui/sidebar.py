@@ -1,4 +1,4 @@
-"""Sidebar shown on every page: load the event, FX rate, add a reply, re-extract."""
+"""Sidebar shown on every page, in three groups: Event, Assumptions, Session."""
 
 from datetime import date
 
@@ -6,30 +6,40 @@ import streamlit as st
 
 from aera.compare import currencies_without_rate, vendor_name
 from aera.config import FX_DATE, FX_RATES, FX_SOURCE
-from aera.event import NotAQuote, add_reply, load_sample_event, reextract_all
+from aera.event import NotAQuote, add_reply, reextract_all
 from aera.extract import ExtractionError
+from aera.ui import render_sidebar, sidebar_sections
 from ui.state import (
     API_CALLS, DECISIONS, DEFAULT_FX_USD, FX_EXTRA_DATE, FX_EXTRA_RATE, FX_USD, REJECTED_UPLOAD, UPLOADS_DONE, fx_is_default, get_event,
-    md, set_event,
+    keep_fx_values, load_sample, md, set_event,
 )
 
 UPLOAD_TYPES = ["xlsx", "docx", "pdf", "eml", "jpg", "jpeg", "png"]
+FOOTER = "Concept prototype. Not an Aerchain product."
 
 
-def render_sidebar() -> None:
-    with st.sidebar:
-        st.header("Event")
-        _load_sample()
-        st.divider()
-        extra_fx = _fx_input()
-        st.divider()
-        _upload()
-        # Filled after the upload, so a currency in a reply added on this run gets its input at once.
-        _extra_fx_inputs(extra_fx)
-        st.divider()
-        _reextract()
-        st.divider()
-        _api_cost()
+def render(page: str) -> None:
+    """The sidebar for `page` (its title). aera/ui.py decides which sections show there."""
+    if "Assumptions" not in sidebar_sections(page):
+        keep_fx_values()  # the FX inputs aren't drawn on this page, so Streamlit would drop their values
+    # Event comes before Assumptions, so a currency in a reply added on this run gets its rate box at once.
+    render_sidebar(page, {"Event": _event, "Assumptions": _assumptions, "Session": _session})
+
+
+def _event() -> None:
+    _load_sample()
+    _upload()
+    _reextract()
+
+
+def _assumptions() -> None:
+    _fx_input()
+    _extra_fx_inputs()
+
+
+def _session() -> None:
+    _api_cost()
+    st.caption(FOOTER)
 
 
 def _api_cost() -> None:
@@ -37,14 +47,13 @@ def _api_cost() -> None:
     total = sum(u["cost_usd"] for u in calls)
     tokens_in = sum(u["input_tokens"] + u["cache_write_tokens"] + u["cache_read_tokens"] for u in calls)
     tokens_out = sum(u["output_tokens"] for u in calls)
-    st.caption(f"Create RFx, Ask and Clarify API cost this session: **~${total:.4f}** "
-               f"({len(calls)} calls, {tokens_in:,} tokens in, {tokens_out:,} out)")
+    st.markdown(f"API cost so far: **~${total:.4f}**")
+    st.caption(f"Create RFx, Ask and Clarify · {len(calls)} calls · {tokens_in:,} tokens in, {tokens_out:,} out")
 
 
 def _load_sample() -> None:
     if st.button("Load sample event", type="primary", width="stretch"):
-        with st.spinner("Loading the sample event (cached files make no API calls)..."):
-            set_event(load_sample_event())
+        load_sample()
 
     event = get_event()
     if event is None:
@@ -56,32 +65,31 @@ def _load_sample() -> None:
         st.warning("Some files could not be used:\n\n" + "\n".join(f"- {e}" for e in event.errors))
 
 
-def _fx_input():
-    """The USD rate. Returns the spot under it where rates for other currencies go."""
+def _fx_input() -> None:
+    """The USD rate, with its date and where it came from."""
     st.number_input("USD to INR rate", min_value=0.01, step=0.25, format="%.2f", key=FX_USD,
                     help="Used for every USD price. Changing it recomputes the comparison.")
-    st.caption(f"Rate date {FX_DATE} · {FX_SOURCE}")
-    if not fx_is_default():
-        st.caption(f"You changed the rate (default {DEFAULT_FX_USD:.2f}). "
+    if fx_is_default():
+        st.caption(f"{FX_SOURCE} · dated {FX_DATE} · not a live market rate")
+    else:
+        st.caption(f"Entered by you (default {DEFAULT_FX_USD:.2f}, {FX_SOURCE.lower()} dated {FX_DATE}). "
                    "Assumptions now say it was entered by you.")
         st.button("Reset to default rate", on_click=_reset_fx)
-    return st.container()
 
 
-def _extra_fx_inputs(spot) -> None:
+def _extra_fx_inputs() -> None:
     event = get_event()
     if event is None:
         return
-    with spot:
-        # Checked against config rates only, so a currency's input stays put once the buyer fills it.
-        for code, needed in currencies_without_rate(event.replies, FX_RATES).items():
-            _extra_fx_input(code, needed)
+    # Checked against config rates only, so a currency's input stays put once the buyer fills it.
+    for code, needed in currencies_without_rate(event.replies, FX_RATES).items():
+        _extra_fx_input(code, needed)
 
 
 def _extra_fx_input(code: str, needed: dict) -> None:
     """A rate for a currency the app has no rate for. Empty by default: nothing is guessed."""
     vendors, lines = needed["vendors"], needed["lines"]
-    label = (f"{code} rate (₹ per {code}) — needed for {vendors} vendor{'s' if vendors != 1 else ''}, "
+    label = (f"{code} rate (₹ per {code}), needed for {vendors} vendor{'s' if vendors != 1 else ''}, "
              f"{lines} line{'s' if lines != 1 else ''}")
     rate = st.number_input(label, min_value=0.01, step=0.25, format="%.2f", value=None,
                            key=FX_EXTRA_RATE + code, placeholder="Enter a rate",
@@ -157,7 +165,7 @@ def _reextract() -> None:
     event = get_event()
     if event is None:
         return
-    st.warning(f"Re-extract all calls Claude again for all {len(event.files)} files, ignoring "
+    st.caption(f":orange[**Re-extract all**] reads all {len(event.files)} files again with Claude, ignoring "
                f"the cache. It costs API credit (about ${event.extraction_cost_usd:.2f} last "
                "time) and clears your review decisions.")
     sure = st.checkbox("I understand this uses API credit")

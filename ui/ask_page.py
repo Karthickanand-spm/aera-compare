@@ -14,8 +14,9 @@ from aera.analyst import (
 )
 from aera.clarify import vendors_mentioned
 from aera.compare import display_name, vendor_name
+from aera.ui import card, empty_state, page_header
 from ui import clarify_page
-from ui.state import API_CALLS, ASK_HISTORY, comparison_tables, fx_settings, get_event, md
+from ui.state import API_CALLS, ASK_HISTORY, comparison_tables, fx_settings, get_event, load_sample, md
 
 # Starting points only: each one is sent to Claude like any typed question.
 EXAMPLES = [
@@ -29,10 +30,11 @@ EXCEL_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def render() -> None:
-    st.title("Ask")
+    page_header("Ask", "Ask questions about the comparison in plain English and get answers worked out in code.",
+                "when you're ready, choose and confirm the award on Decide.")
     event = get_event()
     if event is None:
-        st.info("Click **Load sample event** in the sidebar to begin.")
+        empty_state("No event loaded yet. Load the sample event to ask questions about its quotes.", "Load sample event", load_sample)
         return
     if not event.replies:
         st.warning("No vendor replies could be read yet. See the sidebar for details.")
@@ -49,7 +51,7 @@ def render() -> None:
 
 
 def _question_box() -> None:
-    st.markdown("**Try one of these**")
+    st.markdown("**Try one of these:**")
     cols = st.columns(len(EXAMPLES))
     for i, (col, q) in enumerate(zip(cols, EXAMPLES)):
         col.button(q, key=f"example_{i}", on_click=_set_pending, args=(q,), width="stretch")
@@ -87,9 +89,9 @@ def _history(event) -> None:
         return
     vendors = {display_name(vendor_name(ext)): vendor_name(ext) for ext in event.replies}
     st.divider()
-    st.subheader("Answers (newest first)")
+    st.subheader("Answers, newest first", anchor=False)
     for answer in history:
-        with st.container(border=True):
+        with card():
             _show(answer, vendors)
 
 

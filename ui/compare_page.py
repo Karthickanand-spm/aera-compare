@@ -10,37 +10,45 @@ import pandas as pd
 import streamlit as st
 
 from aera.compare import (
-    BUYER_EDIT, COMPARABLE, FAIL, NOT_COMPARABLE, NOT_QUOTED, PASS, USE_ALTERNATIVE,
+    BUYER_EDIT, COMPARABLE, NOT_COMPARABLE, NOT_QUOTED, PASS, UNCLEAR, USE_ALTERNATIVE,
     USE_EXTRACTED, WITH_ASSUMPTION, buyer_decision, find_snippet_span,
 )
 from aera.event import Event
 from aera.normalize import describe_rates
-from ui.state import DECISIONS, comparison_tables, fx_settings, get_event, md, now_text
+from aera.ui import badge_md, card, empty_state, metric_row, page_header, status_badge, tint
+from ui.state import DECISIONS, comparison_tables, fx_settings, get_event, load_sample, md, now_text
 
 FORMAT_NAMES = {"excel": "Excel", "word": "Word", "email": "Email", "pdf": "PDF", "image": "Photo"}
-QUALITY_COLORS = {PASS: "green", FAIL: "red"}  # anything else (UNCLEAR) is amber
-SEVERITY_COLORS = {"high": "red", "medium": "orange", "low": "gray"}
 LABEL_MARKS = {COMPARABLE: "", WITH_ASSUMPTION: " ≈", NOT_COMPARABLE: " ≠"}
 REVIEW_MARK, CONFIRMED_MARK = "⚠", "✓"
 CARDS_PER_ROW = 3
 CONTEXT_LINES = 4  # lines shown either side of a highlighted snippet
 
 
+def page() -> st.Page:
+    """The navigation entry. Built here so other pages can switch to the same page."""
+    return st.Page(render, title="Compare", url_path="compare", default=True)
+
+
 def render() -> None:
+    page_header("Compare", "Every vendor's price side by side, with a clear mark on any number that "
+                "can't be compared like for like.",
+                "confirm the values flagged for review below, then ask questions on Ask.")
     event = get_event()
     if event is None:
-        st.title("Compare")
-        st.info("Click **Load sample event** in the sidebar to begin.")
+        empty_state("No event loaded yet. Load the sample event to see five vendor replies compared.",
+                    "Load sample event", load_sample)
         return
 
     rfx = event.rfx
-    st.title(rfx.title)
+    st.markdown(f"**{md(rfx.title)}**")
     st.caption(f"{rfx.rfx_id} · {rfx.buyer} · issued {rfx.issued} · due {rfx.due}")
     if not event.replies:
         st.warning("No vendor replies could be read yet. See the sidebar for details.")
         return
 
     comparison, summary = comparison_tables(event)
+    _headline(event, comparison)
     _vendor_cards(event, summary)
     st.divider()
     _grid(event, comparison)
@@ -48,6 +56,18 @@ def render() -> None:
     _inspect(event, comparison)
     st.divider()
     _review_panel(comparison)
+
+
+def _headline(event: Event, comparison: pd.DataFrame) -> None:
+    review = comparison[comparison["needs_review"].astype(bool)]
+    metric_row([
+        ("Vendor replies", len(event.replies)),
+        ("RFx lines", len(event.rfx.lines)),
+        ("Not quoted", int((comparison["label"] == NOT_QUOTED).sum()),
+         "Line and vendor pairs the vendor skipped. Never counted as zero."),
+        ("Waiting for your review", int((~review["buyer_confirmed"].astype(bool)).sum()),
+         "Low-confidence values. They count only after you confirm them in the review panel below."),
+    ])
 
 
 # ---------- Vendor cards ----------
@@ -59,7 +79,7 @@ def _vendor_cards(event: Event, summary: pd.DataFrame) -> None:
     for start in range(0, len(rows), CARDS_PER_ROW):
         cols = st.columns(CARDS_PER_ROW)
         for col, s in zip(cols, rows[start:start + CARDS_PER_ROW]):
-            with col, st.container(border=True):
+            with col, card():
                 _vendor_card(event, s, n_lines)
 
 
@@ -73,14 +93,14 @@ def _vendor_card(event: Event, s, n_lines: int) -> None:
     payment = "Not stated" if _missing(s.payment_days) else f"{s.payment_days:g} days"
     st.markdown(f"Freight: **{freight}** · Payment: **{payment}**")
 
-    st.badge(f"Quality {s.quality_status}", color=QUALITY_COLORS.get(s.quality_status, "orange"))
+    status_badge(f"Quality {s.quality_status}", s.quality_status)
     with st.expander("Quality reasons"):
         st.markdown("\n".join(f"- {md(r)}" for r in s.quality_reasons) or "No checks recorded.")
 
     if s.open_risks:
         st.markdown("**Open risks**")
         st.markdown("\n\n".join(
-            f":{SEVERITY_COLORS[r['severity']]}-badge[{r['severity'].upper()}] {md(r['text'])}"
+            f"{badge_md(r['severity'].upper())} {md(r['text'])}"
             for r in s.open_risks))
     else:
         st.caption("No open risks.")
@@ -102,8 +122,8 @@ def _grid(event: Event, comparison: pd.DataFrame) -> None:
     st.caption(f"INR per piece. FX: {describe_rates(rates, fx_date)}. "
                f"Not comparable and Not quoted cells are left out of totals.{no_rate}")
     st.markdown(
-        "**Legend:** `12.34` Comparable · `12.34 ≈` Comparable with assumption · "
-        "`12.34 ≠` Not comparable · `Not quoted` vendor skipped the line (never 0) · "
+        f"{badge_md(COMPARABLE)} `12.34` · {badge_md(WITH_ASSUMPTION)} `12.34 ≈` · "
+        f"{badge_md(NOT_COMPARABLE)} `12.34 ≠` · {badge_md(NOT_QUOTED)} vendor skipped the line (never 0) · "
         f"`{REVIEW_MARK}` needs your review · `{CONFIRMED_MARK}` confirmed by you"
     )
 
@@ -155,14 +175,15 @@ def _cell_text(r) -> str:
 
 
 def _cell_style(text: str) -> str:
+    """Tints in the badge colours. Text keeps the theme colour so it stays readable in light and dark mode."""
     if text.endswith(REVIEW_MARK):
-        return "background-color: rgba(245, 158, 11, 0.25)"
+        return tint(UNCLEAR)
     if text.startswith("Not quoted"):
-        return "color: rgba(128, 128, 128, 0.9); font-style: italic"
+        return tint(NOT_QUOTED) + "; font-style: italic"
     if "≠" in text:
-        return "background-color: rgba(239, 68, 68, 0.15)"
+        return tint(NOT_COMPARABLE)
     if text.endswith(CONFIRMED_MARK):
-        return "background-color: rgba(34, 197, 94, 0.15)"
+        return tint(PASS)
     return ""
 
 
@@ -188,12 +209,14 @@ def _inspect(event: Event, comparison: pd.DataFrame) -> None:
 
 def _cell_detail(event: Event, r) -> None:
     r = _clean(r)
-    c1, c2, c3 = st.columns(3)
     price = r["price_inr_per_piece"]
-    c1.metric("INR per piece", "Not quoted" if r["label"] == NOT_QUOTED
-              else "No price" if _missing(price) else f"{price:,.2f}")
-    c2.metric("Label", r["label"])
-    c3.metric("Confidence", r["confidence"].capitalize())
+    status_badge(r["label"])
+    metric_row([
+        ("INR per piece", "Not quoted" if r["label"] == NOT_QUOTED
+         else "No price" if _missing(price) else f"{price:,.2f}"),
+        ("Confidence", r["confidence"].capitalize()),
+        ("Assumptions", len(r["assumptions"])),
+    ])
 
     if r["buyer_decision"]:
         st.success(f"{CONFIRMED_MARK} {r['buyer_decision']}")
@@ -292,7 +315,7 @@ def _review_panel(comparison: pd.DataFrame) -> None:
     st.caption(f"{waiting} waiting · {len(review) - waiting} confirmed. Low-confidence values "
                "need your decision before they count.")
     for _, r in review.iterrows():
-        with st.container(border=True):
+        with card():
             _review_row(r)
 
 
@@ -306,7 +329,7 @@ def _review_row(r) -> None:
     shown = ("Not quoted" if r["label"] == NOT_QUOTED
              else "no price" if _missing(price) else f"INR {price:,.2f} per piece")
     st.markdown(f"Vendor wrote: {md(r['raw_price_text']) if r['raw_price_text'] else '—'} → "
-                f"**{shown}** · {r['label']} · confidence {r['confidence']}")
+                f"**{shown}** · {badge_md(r['label'])} · confidence {r['confidence']}")
     with st.expander("Why it needs review"):
         st.markdown("\n".join(f"- {md(x)}" for x in r["confidence_reasons"]))
 

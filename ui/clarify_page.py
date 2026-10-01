@@ -13,13 +13,13 @@ import streamlit as st
 from aera.clarify import ClarifyError, all_open_items, draft_email, ticked_by_default, vendors_mentioned
 from aera.compare import display_name, vendor_name
 from aera.ingest import load_reply_bytes
+from aera.ui import card, empty_state, page_header, status_text_md
 from ui.state import (
     API_CALLS, ASK_HISTORY, CLARIFY_DRAFTS, CLARIFY_EXTRA, CLARIFY_FOCUS, SENT_LOG, comparison_tables,
-    get_event, md, now_text,
+    get_event, load_sample, md, now_text,
 )
 
 URL_PATH = "clarify"
-SEVERITY_COLORS = {"high": "red", "medium": "orange", "low": "gray"}  # same as the Decide page
 
 
 def page() -> st.Page:
@@ -36,10 +36,11 @@ def open_for(vendor: str, missing: list[str]) -> None:
 
 
 def render() -> None:
-    st.title("Clarify")
+    page_header("Clarify", "Draft one email per vendor asking about anything that is still unclear in their quote.",
+                "send the drafts, then add each vendor's answer as a new reply from the sidebar.")
     event = get_event()
     if event is None:
-        st.info("Click **Load sample event** in the sidebar to begin.")
+        empty_state("No event loaded yet. Load the sample event to see what each vendor still needs to clarify.", "Load sample event", load_sample)
         return
     if not event.replies:
         st.warning("No vendor replies could be read yet. See the sidebar for details.")
@@ -80,8 +81,8 @@ def _analyst_missing(event) -> dict[str, list[str]]:
 
 def _card(event, ext: dict, items: list[dict], focused: bool) -> None:
     vendor = vendor_name(ext)
-    with st.container(border=True):
-        st.subheader(display_name(vendor))
+    with card():
+        st.subheader(display_name(vendor), anchor=False)
         if focused:
             st.caption("Opened from the Ask page: the analyst's missing data is added below.")
         if not items:
@@ -94,8 +95,7 @@ def _card(event, ext: dict, items: list[dict], focused: bool) -> None:
                        "Tick them to mention them briefly at the end.")
         chosen = []
         for it in items:
-            color = SEVERITY_COLORS[it["severity"]]
-            label = f":{color}[**{it['severity'].upper()}**] {md(it['text'])}"
+            label = f"{status_text_md(it['severity'].upper())} {md(it['text'])}"
             if it["vendor_words"]:
                 label += f" · vendor wrote: *'{md(it['vendor_words'])}'*"
             if st.checkbox(label, value=ticked_by_default(it), key=f"clarify_item_{vendor}_{it['key']}"):
@@ -155,7 +155,7 @@ def _draft_box(vendor: str, chosen: list[dict]) -> None:
 
 def _sent_log() -> None:
     st.divider()
-    st.subheader("Sent log")
+    st.subheader("Sent log", anchor=False)
     st.caption("Sending is simulated in this prototype: nothing is emailed, the send is only logged here.")
     log = st.session_state[SENT_LOG]
     if not log:

@@ -13,11 +13,15 @@ import pandas as pd
 import streamlit as st
 
 from aera.analyst import AnalystError
+from aera.ui import card, info_strip, metric_row, page_header
+from ui import compare_page
 from aera.rfx_builder import (
     GREETING, LINE_FIELDS, _blank, checklist, is_complete, load_vendor_list, next_turn, quality_bar_set,
     rows_to_lines, to_rfx_json,
 )
-from ui.state import API_CALLS, RFX_CHAT, RFX_DRAFT, RFX_SENT_LOG, RFX_TABLE_VERSION, md, now_text
+from ui.state import (
+    API_CALLS, RFX_CHAT, RFX_DRAFT, RFX_SENT_LOG, RFX_TABLE_VERSION, get_event, load_sample, md, now_text,
+)
 
 VENDORS_PATH = Path(__file__).resolve().parent.parent / "data" / "sample" / "vendors.json"
 
@@ -45,9 +49,13 @@ COLUMN_CONFIG = {
 
 
 def render() -> None:
-    st.title("Create RFx")
-    st.caption("Describe what you need. Claude asks follow-up questions and fills in the draft; code blanks "
-               "any number you haven't stated. Each message uses API credit (see the sidebar).")
+    page_header("Create RFx", "Describe what you need and Claude drafts the request for quotes with you.",
+                "send it to vendors, then load the sample event to see how replies are compared.")
+    if info_strip("Want to see what happens when replies come back? A sample event with 5 vendor "
+                  "replies is ready.", "Open the sample event", key="sample_strip"):
+        _open_sample()
+    st.caption("Claude asks follow-up questions and fills in the draft; code blanks any number you haven't "
+               "stated. Each message uses API credit (see the sidebar).")
 
     draft = st.session_state[RFX_DRAFT]
     chat_col, doc_col = st.columns([45, 55], gap="large")
@@ -55,6 +63,13 @@ def render() -> None:
         _document(draft)
     with chat_col:
         _chat(draft)
+
+
+def _open_sample() -> None:
+    """Load the sample event and go to Compare. An event already loaded is kept, with its review decisions."""
+    if get_event() is None:
+        load_sample()
+    st.switch_page(compare_page.page())
 
 
 # ---------- Chat ----------
@@ -128,7 +143,7 @@ def _document(draft: dict) -> None:
     complete = done == len(items)
     rfx_id = to_rfx_json(draft, date.today())["rfx_id"]
 
-    with st.container(border=True):
+    with card():
         head, pill = st.columns([3, 2], vertical_alignment="center")
         with head:
             st.markdown(f"#### {md(draft.get('title') or 'Untitled RFx')}")
@@ -207,14 +222,17 @@ def _line_metrics(lines: list[dict]) -> None:
         return
     qtys = [ln["annual_qty"] for ln in lines if ln.get("annual_qty") is not None]
     no_qty = len(lines) - len(qtys)
-    cols = st.columns(3)
-    cols[0].metric("Lines", len(lines))
-    cols[1].metric("Total annual qty", _indian(sum(qtys)) if qtys else "—",
-                   help=f"{no_qty} line(s) have no quantity yet and are not counted." if no_qty else None)
+    items = [
+        ("Lines", len(lines)),
+        ("Total annual qty", _indian(sum(qtys)) if qtys else "—",
+         f"{no_qty} line(s) have no quantity yet and are not counted." if no_qty else None),
+    ]
     if all(ln.get("annual_qty") is not None and ln.get("nominal_weight_g") is not None for ln in lines):
         tonnes = sum(ln["annual_qty"] * ln["nominal_weight_g"] for ln in lines) / 1_000_000
-        cols[2].metric("Est. tonnage / year", f"{tonnes:,.1f} t",
-                       help="Annual qty x nominal weight, summed over all lines.")
+        items.append(("Est. tonnage / year", f"{tonnes:,.1f} t", "Annual qty x nominal weight, summed over all lines."))
+    else:
+        items.append(("Est. tonnage / year", "—", "Needs a quantity and a weight on every line."))
+    metric_row(items)
 
 
 def _details(draft: dict) -> None:

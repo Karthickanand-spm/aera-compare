@@ -12,21 +12,22 @@ from aera.award import (
     APPROACHES, CAPPED, CHEAPEST, MAX_CAP, NOT_AWARDED, SINGLE, AwardSettings, award_signature, award_to_excel,
     build_award, confirm_award, confirm_blockers, vendor_choices, vendor_discounts,
 )
-from aera.compare import FAIL
 from aera.normalize import describe_rates
-from ui.state import AWARD_CONFIRMED, comparison_tables, fx_settings, get_event, md, now_text
+from aera.ui import badge_md, empty_state, metric_row, page_header
+from ui.state import AWARD_CONFIRMED, comparison_tables, fx_settings, get_event, load_sample, md, now_text
 
 BEST_SINGLE = "Best available vendor"
-SEVERITY_COLORS = {"high": "red", "medium": "orange", "low": "gray"}
 REVIEW_MARK = "⚠"
 EXCEL_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def render() -> None:
-    st.title("Decide")
+    page_header("Decide", "Choose how to split the award, check its risks, and confirm it. "
+                "The app recommends; you decide.",
+                "ask vendors about anything still open on Clarify.")
     event = get_event()
     if event is None:
-        st.info("Click **Load sample event** in the sidebar to begin.")
+        empty_state("No event loaded yet. Load the sample event to build an award from its quotes.", "Load sample event", load_sample)
         return
     if not event.replies:
         st.warning("No vendor replies could be read yet. See the sidebar for details.")
@@ -35,8 +36,8 @@ def render() -> None:
     comparison, summary = comparison_tables(event)
     rates, fx_date = fx_settings()
     data = analyst_data(comparison, summary, event.rfx, event.last_year, rates, fx_date)
-    st.caption("The app recommends; you confirm the award. Prices still waiting for review on the "
-               "Compare page must be confirmed there before the award can be confirmed.")
+    st.caption("Prices still waiting for review on the Compare page must be confirmed there before "
+               "the award can be confirmed.")
 
     settings = _controls(summary)
     award = build_award(data, summary, settings, vendor_discounts(event.replies))
@@ -87,8 +88,7 @@ def _controls(summary: pd.DataFrame) -> AwardSettings:
             if box.checkbox(c.display_name, value=bool(c.default_allowed), key=f"award_allow_{c.display_name}"):
                 allowed.append(c.display_name)
             if c.quality_status != "PASS":
-                color = "red" if c.quality_status == FAIL else "orange"
-                why.markdown(f":{color}[**{c.quality_status}**] {md(c.reason)}")
+                why.markdown(f"{badge_md(c.quality_status)} {md(c.reason)}")
         if approach == SINGLE:
             pick = st.selectbox("Vendor for the single award", [BEST_SINGLE] + allowed, key="award_single")
             single = None if pick == BEST_SINGLE else pick
@@ -99,17 +99,19 @@ def _controls(summary: pd.DataFrame) -> AwardSettings:
 # ---------- Results ----------
 
 def _tiles(award) -> None:
-    st.subheader("Recommended award")
-    a, b, c, d = st.columns(4)
-    a.metric("Annual total", format_inr(award.total_inr))
+    st.subheader("Recommended award", anchor=False)
     if award.saving_inr is None:
-        b.metric("Vs last year", "—", help="No awarded line has a last-year price.")
+        vs_last_year = ("Vs last year", "—", "No awarded line has a last-year price.")
     else:
         change = describe_change(award.saving_inr, award.saving_pct)
-        b.metric("Vs last year", change[0].upper() + change[1:],
-                 help=f"On the {len(award.saving_lines)} awarded lines with a last-year price.")
-    c.metric("Vendors used", len(award.vendors_used))
-    d.metric("Review lines unconfirmed", len(award.unconfirmed))
+        vs_last_year = ("Vs last year", change[0].upper() + change[1:],
+                        f"On the {len(award.saving_lines)} awarded lines with a last-year price.")
+    metric_row([
+        ("Annual total", format_inr(award.total_inr)),
+        vs_last_year,
+        ("Vendors used", len(award.vendors_used)),
+        ("Review lines unconfirmed", len(award.unconfirmed)),
+    ])
     st.caption("Awarded to: " + md(", ".join(award.vendors_used)))
     if award.unawarded_lines:
         st.warning(f"Not awarded (no allowed vendor priced them): lines {award.unawarded_lines}. "
@@ -156,9 +158,8 @@ def _risks(award) -> None:
     if not award.risks:
         st.success("No open risks for the vendors in this award.")
     for r in award.risks:
-        color = SEVERITY_COLORS.get(r["severity"], "gray")
         who = f"**{md(r['vendor'])}**: " if r["vendor"] else ""
-        st.markdown(f":{color}[**{r['severity'].upper()}**] {who}{md(r['text'])}")
+        st.markdown(f"{badge_md(r['severity'].upper())} {who}{md(r['text'])}")
     for s in award.sensitivity:
         st.markdown(f"**Freight sensitivity: {md(s['vendor'])}**")
         if s.get("error"):
@@ -182,7 +183,7 @@ def _assumptions(award) -> None:
 
 def _confirm(award) -> dict | None:
     """Show the confirm controls. Returns the confirmation if it matches the award shown."""
-    st.subheader("Confirm award")
+    st.subheader("Confirm award", anchor=False)
     record = st.session_state[AWARD_CONFIRMED]
     current = record if record and record["signature"] == award_signature(award) else None
     if current:
