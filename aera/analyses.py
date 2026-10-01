@@ -19,7 +19,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from aera.compare import AMBIGUOUS_ASSUMPTION, FAIL, HIGH, LOW, MEDIUM, PASS, SEVERITY_ORDER, UNCLEAR
+from aera.compare import AMBIGUOUS_ASSUMPTION, FAIL, HIGH, LOW, MEDIUM, NOT_QUOTED, PASS, SEVERITY_ORDER, UNCLEAR
 from aera.money import (
     MISSING_TEXT, describe_change, display_table, format_inr, plain_number, pct_text,
 )
@@ -921,8 +921,10 @@ def landed_cost(data: AnalystData, scope: Scope, named=None, rate_inr_per_kg: fl
 
 # ---------- line_lookup ----------
 
-LOOKUP_COLUMNS = ["line_id", "description", "vendor", "price_inr_per_piece", "label", "confidence",
-                  "raw_price_text", "source_file", "source_snippet"]
+LOOKUP_COLUMNS = ["line_id", "description", "vendor", "price_inr_per_piece", "label", "assumptions",
+                  "confidence", "raw_price_text", "source_file", "source_snippet"]
+# Said next to a price when the vendor's freight terms mean it is not a delivered price.
+FREIGHT_NOTES = {"extra": "freight extra, not in this price", "unclear": "freight terms unclear"}
 
 
 def line_lookup(data: AnalystData, scope: Scope, line_ids=None) -> Analysis:
@@ -950,10 +952,21 @@ def line_lookup(data: AnalystData, scope: Scope, line_ids=None) -> Analysis:
     qty = data.rfx_lines.set_index("line_id")["annual_qty"]
     won = award_by_line(data, scope.names).set_index("line_id")
 
+    price_notes: list[str] = []
+
+    def quote_text(r) -> str:
+        if pd.isna(r.price_inr_per_piece):
+            return f"{r.vendor} {r.label.lower()}"
+        notes = [str(x) for x in (r.assumptions if isinstance(r.assumptions, list) else []) if x]
+        if freight := FREIGHT_NOTES.get(_freight_terms(data, r.vendor)):
+            notes.append(freight)
+        price_notes.extend(f"{r.vendor} line {r.line_id}: {n}" for n in notes)
+        detail = f"{r.label}: {'; '.join(notes)}" if notes else r.label
+        return f"{r.vendor} {format_inr(r.price_inr_per_piece, per_unit=True)} per piece ({detail})"
+
     def line_text(i: int) -> str:
         mine = a.table[a.table["line_id"] == i]
-        quotes = [f"{r.vendor} {format_inr(r.price_inr_per_piece, per_unit=True)} per piece ({r.label})"
-                  if pd.notna(r.price_inr_per_piece) else f"{r.vendor} {r.label.lower()}" for r in mine.itertuples()]
+        quotes = [quote_text(r) for r in mine.itertuples()]
         text = f"Line {i} ({desc[i]}): " + ("; ".join(quotes) or "no vendor considered quoted it")
         if i in won.index:
             w = won.loc[i]
@@ -967,11 +980,18 @@ def line_lookup(data: AnalystData, scope: Scope, line_ids=None) -> Analysis:
     if len(lines) <= MAX_LINES_IN_DETAIL:
         facts["lines"] = [line_text(i) for i in lines]
         facts["line_ids_asked"] = [str(i) for i in lines] if asked else []
+        if price_notes:
+            facts["price_notes"] = price_notes
     else:
         counts = won.loc[won.index.isin(lines), "winner"].value_counts()
         facts["cheapest_counts"] = [f"{n} has the cheapest counted price on {_plural(int(k), 'line')}"
                                     for n, k in counts.items()]
         facts["table_note"] = f"The table below lists every vendor's price on all {len(lines)} lines with its source."
+        skipped = a.table[a.table["label"] == NOT_QUOTED]
+        facts["not_quoted"] = [f"{n} did not quote {_plural(len(g), 'line')}: {join_names([str(i) for i in g['line_id']])}"
+                               for n, g in skipped.groupby("vendor", sort=False)] or \
+                              [f"Every vendor shown quoted all {len(lines)} lines."]
+        facts["not_quoted_line_ids"] = [str(i) for i in sorted(set(skipped["line_id"]))]
     a.caveats += review_caveats(data, scope.names, lines)
     a.values = {"lines": lines}
     return a

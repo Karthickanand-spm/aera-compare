@@ -232,6 +232,21 @@ def test_line_lookup_keeps_not_quoted_as_missing_never_zero(sample):
     assert f"{INDUS} not quoted" in a.facts["lines"][0]
 
 
+def test_line_lookup_over_all_lines_lists_what_each_vendor_did_not_quote(sample):
+    df = sample.df
+    expected = sorted(int(i) for i in df[(df["display_name"] == INDUS) & (df["label"] == "Not quoted")]["rfx_line_id"])
+    a = line_lookup(sample, vendor_scope(sample, [INDUS]))
+    assert a.facts["not_quoted"] == [f"{INDUS} did not quote {len(expected)} lines: "
+                                     + analyses.join_names([str(i) for i in expected])]
+    assert a.facts["not_quoted_line_ids"] == [str(i) for i in expected]
+
+
+def test_line_lookup_notes_assumptions_and_freight_next_to_a_price(sample):
+    a = line_lookup(sample, vendor_scope(sample, [GANESH]), [11])
+    assert "per kg" in a.facts["lines"][0] and "freight extra" in a.facts["lines"][0]
+    assert any("freight extra" in n for n in a.facts["price_notes"])
+
+
 def test_line_lookup_reports_a_line_that_does_not_exist(sample):
     a = line_lookup(sample, vendor_scope(sample), [3, 99])
     assert any("no RFx line 99" in c for c in a.caveats)

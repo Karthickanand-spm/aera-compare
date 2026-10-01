@@ -91,6 +91,9 @@ class Classification(BaseModel):
     include_failed: bool = Field(
         description="True ONLY if the buyer explicitly asks to include vendors that failed quality or whose "
                     "quality is unclear. Otherwise false.")
+    add_vendors: bool = Field(
+        description="True if the buyer asks to ADD the named vendors to the usual ones (e.g. 'include X in the "
+                    "split'). False if the buyer limits the answer to the named vendors, or names none.")
     cap: int | None = Field(description="award_capped: the most vendors allowed. Otherwise null.")
     line_ids: list[int] = Field(description="RFx line ids the buyer names. Empty if none.")
     fx_change_pct: float | None = Field(
@@ -106,12 +109,12 @@ CLASSIFY_RULES = """You route a procurement buyer's question about a comparison 
 You do not answer it and you do no arithmetic: you pick the intent and pull out its parameters. Code works out every answer.
 
 intent (pick exactly one):
-- "award_split": an award or split across vendors line by line (who gets which lines), and what it saves against last year.
+- "award_split": an award or split across vendors line by line (who gets which lines), and what it saves against last year. Also what it would cost to award every line to one named vendor (put that vendor in vendors).
 - "award_capped": the same, but limited to at most N vendors (e.g. "only two suppliers"). Put N in cap.
 - "vendor_totals": total or annual cost per vendor, as a table or chart, or which vendor is cheapest overall.
 - "recommendation": which vendor is best or who to choose, with no single criterion given.
 - "landed_cost": delivered or landed cost, or what freight does to the award or saving (e.g. "what if a vendor charges freight"). A freight rate in ₹ per kg goes in freight_rate_inr_per_kg.
-- "line_lookup": prices or details for particular lines or vendors (what a vendor quoted, a line's cheapest vendor, a price gap on a line).
+- "line_lookup": prices or details for particular lines or vendors (what a vendor quoted, which lines a vendor did or did not quote, a line's cheapest vendor, a price gap on a line).
 - "fx_sensitivity": what happens if an exchange rate moves. fx_change_pct is the signed % change of the foreign currency against the rupee (rupee weakens 3% or USD up 3% -> 3; USD falls 2% -> -2).
 - "quality_risk": quality status, certificates against what vendors claimed, open risks.
 - "other_analysis": any other question about this comparison that needs a calculation or lookup. Code will be written for it.
@@ -119,6 +122,7 @@ intent (pick exactly one):
 
 Parameters (empty list or null when the buyer gives none):
 - vendors: vendors the buyer names, written as their display_name from the list.
+- add_vendors: true when the named vendors are to be added to the usual vendors ("include X in the split", "also consider X"); false when the buyer limits the answer to them ("split between X and Y", "what did X quote").
 - include_failed: true ONLY if the buyer explicitly asks for vendors that failed quality or whose quality is unclear: by naming such a vendor, or by asking for them as a group (e.g. "including the ones that failed quality", "all five vendors" when five is every vendor). Saying "vendors" or "by vendor" is not asking.
 - cap, line_ids, fx_change_pct, freight_rate_inr_per_kg: only as the buyer gives them.
 - wants_chart: true when the buyer asks for a chart, graph or plot."""
@@ -532,8 +536,10 @@ INTENT_RULES = {
                   "say each item in freight_risks as given, keeping every figure in freight_must_include, then any "
                   "at_the_rate_asked, and end with the offer. If no_freight_to_add is given, say it with "
                   "total_before_freight."),
-    LINE_LOOKUP: ("Give each item in lines: what each vendor quoted and the cheapest counted price with its gap. If "
-                  "cheapest_counts is given instead, summarise it and say the table has every price with its source."),
+    LINE_LOOKUP: ("Give each item in lines: what each vendor quoted, with every assumption and freight note in its "
+                  "brackets (e.g. the exchange rate, a per-kg conversion, freight extra), and the cheapest counted price "
+                  "with its gap. If cheapest_counts is given instead, start with not_quoted (every line number, as "
+                  "given), then summarise cheapest_counts and say the table has every price with its source."),
     FX_SENSITIVITY: ("Give the change and the rate, how many lines change hands (lines_changing_hands_count; say "
                      "\"no line\" if it is 0) and which, and award_total. Name the vendors priced in that currency; "
                      "if currency_vendors_not_considered is given, say they were not considered."),
@@ -630,9 +636,16 @@ def _required(intent: str, text: str, facts: dict, names: list[str]) -> list[str
         need_name(facts["lowest_risk_vendor"], "lowest-risk vendor")
         need("split", "the cheapest split")
     if intent == LINE_LOOKUP:
-        for i in facts.get("line_ids_asked", []):
+        for i in facts.get("line_ids_asked", []) + facts.get("not_quoted_line_ids", []):
             if not re.search(rf"\b{re.escape(i)}\b", text):
                 problems.append(f"line {i} not mentioned")
+        for note in facts.get("price_notes", []):  # an assumption or freight note on a price shown
+            first = (numbers_in_text(note.split(": ", 1)[-1]) or [None])[0]  # after "<vendor> line <n>: "
+            if "freight" in note.lower():
+                if "freight" not in lower:
+                    problems.append(f"freight note dropped ({note})")
+            elif first and not _has_number(text, to_float(first)):
+                problems.append(f"assumption dropped ({note})")
     if intent == FX_SENSITIVITY:
         if not _has_number(text, float(facts["change_pct"])):
             problems.append(f"missing the rate change ({facts['change_pct']}%)")
@@ -757,6 +770,7 @@ def template_answer(intent: str, facts: dict) -> str:
         if facts.get("lines"):
             parts += [_s(x) for x in facts["lines"]]
         else:
+            parts += [_s(x) for x in facts.get("not_quoted", [])]
             parts += [_s(join_names(facts.get("cheapest_counts", []))), facts.get("table_note", "")]
     elif intent == FX_SENSITIVITY:
         n = int(facts["lines_changing_hands_count"])
@@ -928,7 +942,13 @@ def compute(intent: str, cls: dict, data: AnalystData) -> Analysis:
     if intent == QUALITY_RISK:
         return analyses.quality_risk(data, vendors)
     # A landed-cost question names the vendor whose freight to add, not the vendors to award between.
-    scope = vendor_scope(data, None if intent in (LANDED_COST, RECOMMENDATION) else vendors, include_failed)
+    named = None if intent in (LANDED_COST, RECOMMENDATION) else vendors
+    if named and cls.get("add_vendors"):  # "include X": the usual quality-passed vendors plus X
+        named = [*data.vendors.loc[data.vendors["quality_status"] == PASS, "display_name"], *named]
+    scope = vendor_scope(data, named, include_failed)
+    if named and cls.get("add_vendors"):  # the other failed / unclear vendors are still left out, and said so
+        scope.excluded += [e for e in vendor_scope(data).excluded
+                           if e["display_name"] not in scope.names + [x["display_name"] for x in scope.excluded]]
     if intent == AWARD_SPLIT:
         return analyses.award_split(data, scope)
     if intent == AWARD_CAPPED:

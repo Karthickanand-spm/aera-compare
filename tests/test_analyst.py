@@ -382,6 +382,23 @@ def test_include_failed_warning_must_open_the_answer(sample):
     assert any("quality warning" in n for n in answer.wording_notes)
 
 
+def test_add_vendors_adds_the_named_vendor_to_the_quality_passed_ones(sample):
+    sahyadri = "Sahyadri Boxes & Cartons"
+    cls = _cls("award_split", vendors=[sahyadri], include_failed=True, add_vendors=True)
+    a = analyst.compute("award_split", cls, sample)
+    passed = list(sample.vendors.loc[sample.vendors["quality_status"] == "PASS", "display_name"])
+    considered = [n for n in sample.vendors["display_name"] if n in a.facts["vendors_considered"]]
+    assert sorted(considered) == sorted(passed + [sahyadri])
+    assert a.facts["quality_warning"].startswith(f"Includes {sahyadri} (failed quality")
+    assert a.excluded == [{"display_name": "Harbourline Packaging (EOU)", "reason": "quality unclear"}]
+
+
+def test_named_vendors_without_add_vendors_limit_the_answer_to_them(sample):
+    sahyadri = "Sahyadri Boxes & Cartons"
+    a = analyst.compute("award_split", _cls("award_split", vendors=[sahyadri], include_failed=True), sample)
+    assert a.facts["vendors_considered"] == sahyadri
+
+
 def test_recommendation_is_three_views_worded_from_facts(sample):
     text = ("It depends what matters most: Ganesh is the cheapest single vendor but hasn't quoted freight, Indus "
             "carries the least risk but costs ₹4.31 lakh more on the 25 common lines, and the cheapest split uses "
@@ -549,7 +566,7 @@ def test_made_up_numbers_and_minus_signs_fail(sample):
 
 def test_numbers_from_the_question_are_allowed(sample):
     facts = _facts(sample, "line_lookup", line_ids=[3])
-    text = ("Line 3: Ganesh is cheapest at ₹7.22 per piece, ₹0.77 per piece (₹65,450 a year) below Indus."
+    text = ("Line 3: Ganesh is cheapest at ₹7.22 per piece (quoted per kg, box weight 190 g; freight extra), ₹0.77 per piece (₹65,450 a year) below Indus."
             + LEFT_OUT + " That covers the 1 line you asked about.")
     assert analyst.check_answer("line_lookup", text, facts, "what about 1 line, line 3?", SAMPLE_NAMES) == []
 
