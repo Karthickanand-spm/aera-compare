@@ -1,7 +1,8 @@
 """Ask page: plain-English questions about the comparison.
 
-Claude writes pandas code; aera/analyst.py runs it and words the answer from the
-result. This page only displays, and shows the code under every answer.
+aera/analyst.py classifies the question, works out the answer in code (aera/analyses.py)
+and has Claude word it from the facts. This page only displays, and shows the code under
+every answer.
 """
 
 import altair as alt
@@ -37,9 +38,9 @@ def render() -> None:
         st.warning("No vendor replies could be read yet. See the sidebar for details.")
         return
 
-    st.caption("Ask about the comparison in plain English. Claude writes pandas code, the code "
-               "does all the maths, and the code is shown under every answer. Each question "
-               "uses API credit (see the sidebar).")
+    st.caption("Ask about the comparison in plain English. Claude works out what you're asking, "
+               "the app's code does all the maths, and the code is shown under every answer. "
+               "Each question uses API credit (see the sidebar).")
     _question_box()
     question = st.session_state.pop(PENDING, None)
     if question:
@@ -100,6 +101,8 @@ def _show(a: Answer, vendors: dict[str, str]) -> None:
         st.warning(a.error)
     else:
         st.markdown(md(a.text))
+        if a.tag:
+            st.caption(f"Answered as: {md(a.tag)}")
         if a.unchecked_numbers:
             st.warning("Check these numbers: they appear in the sentences above but not in the "
                        "calculated result: " + ", ".join(a.unchecked_numbers))

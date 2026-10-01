@@ -2,7 +2,7 @@ import pytest
 
 from aera.config import FX_RATES
 from aera.normalize import (
-    MissingFxRate, NormalizeError, describe_rates, normalize_price, to_inr, to_per_piece,
+    MissingFxRate, NormalizeError, describe_rates, fx_currency, normalize_price, to_inr, to_per_piece,
 )
 
 FX = {"USD": 94.50}
@@ -95,3 +95,10 @@ def test_missing_price_raises():
 
 def test_config_usd_rate():
     assert FX_RATES["USD"] == 94.50
+
+
+def test_fx_currency_reads_back_the_note_to_inr_wrote():
+    _, note = to_inr(0.057, "usd", FX, "2026-09-25")
+    assert fx_currency([note, "Quoted per 100 pieces; divided by 100"]) == "USD"
+    assert fx_currency(["Quoted per kg; multiplied by box weight 128 g"]) is None
+    assert fx_currency([]) is None and fx_currency(None) is None

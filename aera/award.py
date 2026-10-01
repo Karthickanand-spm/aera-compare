@@ -1,6 +1,6 @@
 """Build an award from the comparison. All the arithmetic for the Decide page. No AI, no Streamlit.
 
-Line allocation reuses the analyst's award logic (analyst.award_by_line: cheapest counted
+Line allocation reuses the analyst's award logic (analyses.award_by_line: cheapest counted
 price per line among a set of vendors) and its freight sensitivity, so the Ask page and
 the Decide page always agree on who wins a line.
 
@@ -21,10 +21,8 @@ from itertools import combinations
 
 import pandas as pd
 
-from aera.analyst import (
-    AnalystData, SensitivityError, award_by_line, describe_change, excel_header, format_inr,
-    freight_sensitivity, isolated,
-)
+from aera.analyses import AnalystData, SensitivityError, award_by_line, freight_sensitivity, isolated
+from aera.money import describe_change, excel_header, format_inr
 from aera.compare import (
     COUNTED_LABELS, FAIL, HIGH, LOW, MEDIUM, NOT_COMPARABLE, PASS, UNCLEAR, display_name, risk,
     sort_risks, vendor_name,

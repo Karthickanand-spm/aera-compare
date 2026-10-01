@@ -4,6 +4,8 @@ Every function returns the converted value AND a plain-English assumption
 string (or None when nothing was converted), so the UI can show its working.
 """
 
+import re
+
 UNIT_BASES = ("per_piece", "per_100", "per_1000", "per_pack", "per_kg")
 
 
@@ -41,6 +43,18 @@ def to_inr(value: float, currency: str, fx_rates: dict[str, float],
     rate = fx_rates[code]
     source = fx_date_text(fx_date, code)
     return value * rate, f"{code} at ₹{rate:g} per {code}" + (f", {source}" if source else "")
+
+
+_FX_NOTE = re.compile(r"^(?P<code>[A-Z]{3}) at ₹[\d.]+ per (?P=code)\b")
+
+
+def fx_currency(assumptions) -> str | None:
+    """The currency a price was converted from, read from the FX note to_inr() wrote; None if INR."""
+    for note in assumptions if isinstance(assumptions, (list, tuple)) else []:
+        m = _FX_NOTE.match(str(note))
+        if m:
+            return m.group("code")
+    return None
 
 
 def describe_rates(fx_rates: dict[str, float], fx_date: str | dict[str, str] | None) -> str:
