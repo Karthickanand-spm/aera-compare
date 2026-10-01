@@ -15,6 +15,7 @@ FX_USD = "fx_usd"  # the USD -> INR rate the buyer is using
 UPLOADS_DONE = "uploads_done"  # file_ids of uploads already processed (so reruns don't re-extract)
 ASK_HISTORY = "ask_history"  # aera.analyst.Answer list, newest first
 API_CALLS = "api_calls"  # usage dicts (tokens + cost_usd) for every Ask call this session
+AWARD_CONFIRMED = "award_confirmed"  # aera.award.confirm_award(...) record, or None
 
 DEFAULT_FX_USD = FX_RATES["USD"]
 
@@ -26,6 +27,7 @@ def init_state() -> None:
     st.session_state.setdefault(UPLOADS_DONE, set())
     st.session_state.setdefault(ASK_HISTORY, [])
     st.session_state.setdefault(API_CALLS, [])
+    st.session_state.setdefault(AWARD_CONFIRMED, None)
 
 
 def get_event() -> Event | None:
@@ -36,6 +38,7 @@ def set_event(event: Event) -> None:
     """A freshly loaded or re-extracted event. Earlier review decisions no longer apply."""
     st.session_state[EVENT] = event
     st.session_state[DECISIONS] = {}
+    st.session_state[AWARD_CONFIRMED] = None
 
 
 def fx_is_default() -> bool:
