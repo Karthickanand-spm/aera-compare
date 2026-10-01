@@ -10,19 +10,27 @@ import pandas as pd
 import streamlit as st
 
 from aera.compare import (
-    BUYER_EDIT, COMPARABLE, NOT_COMPARABLE, NOT_QUOTED, PASS, UNCLEAR, USE_ALTERNATIVE,
-    USE_EXTRACTED, WITH_ASSUMPTION, buyer_decision, find_snippet_span,
+    BUYER_EDIT, COMPARABLE, COUNTED_LABELS, HIGH, NOT_COMPARABLE, NOT_QUOTED, PASS, UNCLEAR,
+    USE_ALTERNATIVE, USE_EXTRACTED, WITH_ASSUMPTION, buyer_decision, find_snippet_span,
 )
 from aera.event import Event
 from aera.normalize import describe_rates
-from aera.ui import badge_md, card, empty_state, metric_row, page_header, status_badge, tint
+from aera.ui import (
+    TEAL, badge_md, card, empty_state, info_strip, metric_row, page_header, status_badge, tint,
+)
 from ui.state import DECISIONS, comparison_tables, fx_settings, get_event, load_sample, md, now_text
 
 FORMAT_NAMES = {"excel": "Excel", "word": "Word", "email": "Email", "pdf": "PDF", "image": "Photo"}
 LABEL_MARKS = {COMPARABLE: "", WITH_ASSUMPTION: " ≈", NOT_COMPARABLE: " ≠"}
 REVIEW_MARK, CONFIRMED_MARK = "⚠", "✓"
-CARDS_PER_ROW = 3
+CARDS_PER_ROW = 5  # one row for a typical event; a sixth vendor starts a new row
 CONTEXT_LINES = 4  # lines shown either side of a highlighted snippet
+REVIEW_PANEL = "review_panel_open"  # session key: is the review expander open?
+
+# Grid cell styles. Grey text is semi-transparent so it reads in light and dark mode.
+MUTED_TEXT = "color: rgba(128, 128, 128, 0.95); font-style: italic"  # Not comparable
+FAINT_TEXT = "color: rgba(128, 128, 128, 0.7)"  # Not quoted
+CHEAPEST = f"font-weight: 700; background-color: {TEAL}2E"  # TEAL at ~18% opacity
 
 
 def page() -> st.Page:
@@ -33,7 +41,7 @@ def page() -> st.Page:
 def render() -> None:
     page_header("Compare", "Every vendor's price side by side, with a clear mark on any number that "
                 "can't be compared like for like.",
-                "confirm the values flagged for review below, then ask questions on Ask.")
+                "confirm the values flagged for review, then ask questions on Ask.")
     event = get_event()
     if event is None:
         empty_state("No event loaded yet. Load the sample event to see five vendor replies compared.",
@@ -48,26 +56,77 @@ def render() -> None:
         return
 
     comparison, summary = comparison_tables(event)
-    _headline(event, comparison)
+    _headline(event, comparison, summary)
+    _review_callout(comparison)
     _vendor_cards(event, summary)
     st.divider()
-    _grid(event, comparison)
+    _grid(event, comparison, summary)
     st.divider()
     _inspect(event, comparison)
-    st.divider()
-    _review_panel(comparison)
 
 
-def _headline(event: Event, comparison: pd.DataFrame) -> None:
-    review = comparison[comparison["needs_review"].astype(bool)]
+# ---------- What the page shows (display choices only; no prices are worked out here) ----------
+
+def unconfirmed(comparison: pd.DataFrame) -> pd.Series:
+    """True for cells that need the buyer's review and haven't been confirmed yet."""
+    return comparison["needs_review"].astype(bool) & ~comparison["buyer_confirmed"].astype(bool)
+
+
+def high_risk_count(summary: pd.DataFrame) -> int:
+    """Open high-severity risks across every vendor."""
+    return sum(r["severity"] == HIGH for risks in summary["open_risks"] for r in risks)
+
+
+def cheapest_cells(comparison: pd.DataFrame, summary: pd.DataFrame) -> set[tuple[int, str]]:
+    """(rfx_line_id, vendor) of the lowest counted price on each line, among quality-PASS vendors.
+
+    Only cells that count: comparable (with or without an assumption), with a price, and
+    confirmed if they needed review. Ties are all returned."""
+    passed = set(summary.loc[summary["quality_status"] == PASS, "vendor"])
+    price = pd.to_numeric(comparison["price_inr_per_piece"], errors="coerce")
+    counts = (comparison["vendor"].isin(passed) & comparison["label"].isin(COUNTED_LABELS)
+              & comparison["included_in_totals"].eq(True) & price.notna() & ~unconfirmed(comparison))
+    cells = comparison.loc[counts, ["rfx_line_id", "vendor"]].assign(price=price[counts])
+    best = cells.groupby("rfx_line_id")["price"].transform("min")
+    return set(cells.loc[cells["price"] == best, ["rfx_line_id", "vendor"]].itertuples(index=False, name=None))
+
+
+def lines_with_issues(comparison: pd.DataFrame) -> set[int]:
+    """Lines where any vendor is Not quoted, Not comparable, or waiting for review."""
+    issue = comparison["label"].isin([NOT_QUOTED, NOT_COMPARABLE]) | unconfirmed(comparison)
+    return set(comparison.loc[issue, "rfx_line_id"])
+
+
+def _headline(event: Event, comparison: pd.DataFrame, summary: pd.DataFrame) -> None:
+    cells = len(comparison)
+    comparable = int(comparison["label"].isin(COUNTED_LABELS).sum())
     metric_row([
-        ("Vendor replies", len(event.replies)),
-        ("RFx lines", len(event.rfx.lines)),
-        ("Not quoted", int((comparison["label"] == NOT_QUOTED).sum()),
-         "Line and vendor pairs the vendor skipped. Never counted as zero."),
-        ("Waiting for your review", int((~review["buyer_confirmed"].astype(bool)).sum()),
-         "Low-confidence values. They count only after you confirm them in the review panel below."),
+        ("Vendors", len(summary)),
+        ("Lines", len(event.rfx.lines)),
+        ("Cells comparable", f"{comparable / cells:.0%}" if cells else "–",
+         f"{comparable} of {cells} line and vendor pairs are Comparable or Comparable with assumption. "
+         "Not comparable and Not quoted cells are left out of totals."),
+        ("Values needing review", int(unconfirmed(comparison).sum()),
+         "Low-confidence values. They count only after you confirm them in the review panel."),
+        ("High risks", high_risk_count(summary), "Open high-severity risks, shown on the vendor cards."),
     ])
+
+
+def _review_callout(comparison: pd.DataFrame) -> None:
+    waiting = int(unconfirmed(comparison).sum())
+    if waiting:
+        info_strip(f"**Needs your review ({waiting})**. Low-confidence values don't count until you "
+                   "confirm them.", "Review now", key="review_callout",
+                   icon=":material/warning:", on_click=_open_review_panel)
+    else:
+        st.markdown(":green[:material/check_circle: All values confirmed]")
+    if comparison["needs_review"].astype(bool).any():
+        with st.expander("Review panel", icon=":material/fact_check:", key=REVIEW_PANEL, on_change="rerun"):
+            _review_panel(comparison)
+
+
+def _open_review_panel() -> None:
+    st.session_state[REVIEW_PANEL] = True
 
 
 # ---------- Vendor cards ----------
@@ -76,44 +135,47 @@ def _vendor_cards(event: Event, summary: pd.DataFrame) -> None:
     st.subheader("Vendors")
     n_lines = len(event.rfx.lines)
     rows = list(summary.itertuples(index=False))
-    for start in range(0, len(rows), CARDS_PER_ROW):
-        cols = st.columns(CARDS_PER_ROW)
-        for col, s in zip(cols, rows[start:start + CARDS_PER_ROW]):
-            with col, card():
+    per_row = min(len(rows), CARDS_PER_ROW)
+    for start in range(0, len(rows), per_row):
+        # Bordered columns in one row share the row's height, so every card is the same height.
+        # Streamlit stacks columns on narrow screens.
+        cols = st.columns(per_row, border=True)
+        for col, s in zip(cols, rows[start:start + per_row]):
+            with col:
                 _vendor_card(event, s, n_lines)
+
+
+def _risk_md(r: dict) -> str:
+    return f"{badge_md(r['severity'].upper())} {md(r['text'])}"
 
 
 def _vendor_card(event: Event, s, n_lines: int) -> None:
     f = event.files.get(s.source_file)
     fmt = FORMAT_NAMES.get(f.kind, f.kind) if f else "Unknown"
     st.markdown(f"**{md(s.display_name)}**")
-    st.caption(f"{fmt} reply · {s.source_file}")
-    st.markdown(f"Lines quoted **{s.lines_quoted}** / {n_lines} · comparable **{s.lines_comparable}**")
-    freight = (s.freight or "not stated").capitalize()
-    payment = "Not stated" if _missing(s.payment_days) else f"{s.payment_days:g} days"
-    st.markdown(f"Freight: **{freight}** · Payment: **{payment}**")
-
+    st.caption(f"{fmt} reply")
+    st.markdown(f"Lines quoted **{s.lines_quoted}** / {n_lines}")
     status_badge(f"Quality {s.quality_status}", s.quality_status)
-    with st.expander("Quality reasons"):
-        st.markdown("\n".join(f"- {md(r)}" for r in s.quality_reasons) or "No checks recorded.")
 
-    if s.open_risks:
-        st.markdown("**Open risks**")
-        st.markdown("\n\n".join(
-            f"{badge_md(r['severity'].upper())} {md(r['text'])}"
-            for r in s.open_risks))
-    else:
-        st.caption("No open risks.")
-    if s.discounts:
-        st.markdown("**Discounts**")
-        st.markdown("\n".join(f"- {md(d)}" for d in s.discounts))
-    if s.lines_needing_review:
-        st.markdown(f"{REVIEW_MARK} {s.lines_needing_review} value(s) waiting for your review")
+    # open_risks is already sorted high -> low, so the first one is the most severe.
+    top, more = (s.open_risks[0], s.open_risks[1:]) if s.open_risks else (None, [])
+    st.markdown(_risk_md(top) if top else ":gray[No open risks.]")
+    with st.expander(f"+{len(more)} more" if more else "Details"):
+        if more:
+            st.markdown("\n\n".join(_risk_md(r) for r in more))
+        st.markdown("**Quality checks**")
+        st.markdown("\n".join(f"- {md(r)}" for r in s.quality_reasons) or "No checks recorded.")
+        freight = (s.freight or "not stated").capitalize()
+        payment = "Not stated" if _missing(s.payment_days) else f"{s.payment_days:g} days"
+        st.markdown(f"**Terms**\n\nFreight: {md(freight)} · Payment: {payment}")
+        if s.discounts:
+            st.markdown("\n".join(f"- {md(d)}" for d in s.discounts))
+        st.caption(f"File: {s.source_file} · comparable lines: {s.lines_comparable}")
 
 
 # ---------- Grid ----------
 
-def _grid(event: Event, comparison: pd.DataFrame) -> None:
+def _grid(event: Event, comparison: pd.DataFrame, summary: pd.DataFrame) -> None:
     st.subheader("Price comparison")
     rates, fx_date = fx_settings()
     gaps = sorted({c for c in comparison["missing_fx_currency"] if isinstance(c, str)})
@@ -124,21 +186,38 @@ def _grid(event: Event, comparison: pd.DataFrame) -> None:
     st.markdown(
         f"{badge_md(COMPARABLE)} `12.34` · {badge_md(WITH_ASSUMPTION)} `12.34 ≈` · "
         f"{badge_md(NOT_COMPARABLE)} `12.34 ≠` · {badge_md(NOT_QUOTED)} vendor skipped the line (never 0) · "
-        f"`{REVIEW_MARK}` needs your review · `{CONFIRMED_MARK}` confirmed by you"
+        f"`{REVIEW_MARK}` needs your review · `{CONFIRMED_MARK}` confirmed by you · "
+        f":primary-background[**12.34**] cheapest counted price on the line, quality-PASS vendors only"
     )
 
-    names = _column_names(comparison)
-    cells = comparison.assign(cell=comparison.apply(_cell_text, axis=1))
-    wide = cells.pivot(index="rfx_line_id", columns="vendor", values="cell")
-    table = pd.DataFrame({
-        "Line": [ln.line_id for ln in event.rfx.lines],
-        "Description": [ln.description for ln in event.rfx.lines],
-        "Annual qty": [ln.annual_qty for ln in event.rfx.lines],
-    })
-    for vendor, name in names.items():
-        table[name] = [wide.at[ln.line_id, vendor] for ln in event.rfx.lines]
+    issues = lines_with_issues(comparison)
+    only_issues = st.toggle(f"Show only lines with issues ({len(issues)})", key="grid_only_issues",
+                            help="Lines where any vendor is Not quoted, Not comparable, or waiting "
+                                 f"for review ({REVIEW_MARK}).")
+    lines = [ln for ln in event.rfx.lines if not only_issues or ln.line_id in issues]
+    if not lines:
+        st.success("No lines with issues. Every vendor quoted every line like for like.")
+        return
 
-    styled = table.style.map(_cell_style, subset=list(names.values()))
+    names = _column_names(comparison)
+    cheapest = cheapest_cells(comparison, summary)
+    cells = comparison.assign(
+        cell=comparison.apply(_cell_text, axis=1),
+        css=[_cell_css(r, cheapest) for _, r in comparison.iterrows()],
+    )
+    text = cells.pivot(index="rfx_line_id", columns="vendor", values="cell")
+    css = cells.pivot(index="rfx_line_id", columns="vendor", values="css")
+    table = pd.DataFrame({
+        "Line": [ln.line_id for ln in lines],
+        "Description": [ln.description for ln in lines],
+        "Annual qty": [ln.annual_qty for ln in lines],
+    })
+    styles = pd.DataFrame(index=table.index)
+    for vendor, name in names.items():
+        table[name] = [text.at[ln.line_id, vendor] for ln in lines]
+        styles[name] = [css.at[ln.line_id, vendor] for ln in lines]
+
+    styled = table.style.apply(lambda _: styles, axis=None, subset=list(names.values()))
     column_config = {
         "Line": st.column_config.NumberColumn(width="small", pinned=True),
         "Description": st.column_config.TextColumn(width="medium", pinned=True),
@@ -174,17 +253,18 @@ def _cell_text(r) -> str:
     return text
 
 
-def _cell_style(text: str) -> str:
-    """Tints in the badge colours. Text keeps the theme colour so it stays readable in light and dark mode."""
-    if text.endswith(REVIEW_MARK):
-        return tint(UNCLEAR)
-    if text.startswith("Not quoted"):
-        return tint(NOT_QUOTED) + "; font-style: italic"
-    if "≠" in text:
-        return tint(NOT_COMPARABLE)
-    if text.endswith(CONFIRMED_MARK):
-        return tint(PASS)
-    return ""
+def _cell_css(r, cheapest: set[tuple[int, str]]) -> str:
+    """CSS for one grid cell, from its label and review state. Comparable cells keep the theme's look."""
+    styles = []
+    if r["label"] == NOT_QUOTED:
+        styles.append(FAINT_TEXT)
+    elif r["label"] == NOT_COMPARABLE:
+        styles.append(MUTED_TEXT)
+    if r["needs_review"] and not r["buyer_confirmed"]:
+        styles.append(tint(UNCLEAR))
+    elif (r["rfx_line_id"], r["vendor"]) in cheapest:
+        styles.append(CHEAPEST)
+    return "; ".join(styles)
 
 
 # ---------- Inspect one line ----------
@@ -221,7 +301,8 @@ def _cell_detail(event: Event, r) -> None:
     if r["buyer_decision"]:
         st.success(f"{CONFIRMED_MARK} {r['buyer_decision']}")
     elif r["needs_review"]:
-        st.warning(f"{REVIEW_MARK} Needs your review before it counts. See the review panel below.")
+        st.warning(f"{REVIEW_MARK} Needs your review before it counts. "
+                   "Use the review panel at the top of the page.")
 
     st.markdown(f"**Vendor wrote:** {md(r['raw_price_text']) if r['raw_price_text'] else '—'}")
     if r["quoted_spec"]:
@@ -237,7 +318,7 @@ def _cell_detail(event: Event, r) -> None:
     page = f", page {int(r['page'])}" if not _missing(r["page"]) else ""
     st.markdown(f"**Source:** {md(r['source_file'])}{md(page)}")
     if r["source_snippet"]:
-        st.code(r["source_snippet"], language=None, wrap_lines=True)
+        st.markdown(quote_md(r["source_snippet"]))
     else:
         st.caption("No source snippet (the vendor did not mention this line).")
 
@@ -251,6 +332,11 @@ def _cell_detail(event: Event, r) -> None:
 
     with st.expander("View source file"):
         _source_view(event, r)
+
+
+def quote_md(text: str) -> str:
+    """Vendor text as a Markdown quote block, every line quoted and escaped."""
+    return "\n".join(f"> {md(line)}" if line.strip() else ">" for line in text.splitlines())
 
 
 def _source_view(event: Event, r) -> None:
@@ -308,10 +394,6 @@ def _text_box(text: str, span: tuple[int, int] | None) -> str:
 def _review_panel(comparison: pd.DataFrame) -> None:
     review = comparison[comparison["needs_review"].astype(bool)]
     waiting = int((~review["buyer_confirmed"].astype(bool)).sum())
-    st.subheader("Review")
-    if review.empty:
-        st.success("Nothing needs review. Every value passed the checks.")
-        return
     st.caption(f"{waiting} waiting · {len(review) - waiting} confirmed. Low-confidence values "
                "need your decision before they count.")
     for _, r in review.iterrows():
