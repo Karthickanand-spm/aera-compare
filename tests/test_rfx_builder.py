@@ -4,8 +4,9 @@ from datetime import date
 from pathlib import Path
 
 from aera.rfx_builder import (
-    build_messages, checklist, empty_draft, guard_numbers, is_complete, load_vendor_list, next_turn,
-    numbers_in_text, rows_to_lines, to_rfx_json,
+    MAX_FOLLOW_UPS, build_messages, cap_questions, checklist, empty_draft, guard_numbers, is_complete,
+    load_vendor_list, next_turn, numbers_in_text, parse_reply, reply_text, rows_to_lines, strip_tags,
+    tagged_answers, to_rfx_json,
 )
 
 SAMPLE = Path(__file__).resolve().parent.parent / "data" / "sample"
@@ -166,13 +167,76 @@ def test_next_turn_checks_claudes_numbers():
         draft = empty_draft()
         draft["lines"] = [_line(description="Iron carton", annual_qty=50000, size=""),
                           _line(description="Kettle carton", annual_qty=12345)]
-        return {"reply_to_buyer": " How many kettle cartons? ", "rfx_draft": draft}, {"cost_usd": 0.0}
+        return {"summary": " Added two lines. ", "questions": [_q("Q1", "How many kettle cartons?")],
+                "rfx_draft": draft}, {"cost_usd": 0.0}
 
     history = [{"role": "user", "content": "50k iron cartons and some kettle cartons"}]
-    reply, draft, notes, usage = next_turn(history, empty_draft(), call=fake_claude)
-    assert reply == "How many kettle cartons?"
+    summary, questions, draft, notes, usage = next_turn(history, empty_draft(), call=fake_claude)
+    assert summary == "Added two lines."
+    assert [q["text"] for q in questions] == ["How many kettle cartons?"]
     assert draft["lines"][0]["annual_qty"] == 50000
     assert draft["lines"][0]["size"] is None
     assert draft["lines"][1]["annual_qty"] is None
     assert len(notes) == 1 and "Kettle carton" in notes[0]
     assert not math.isnan(usage["cost_usd"])
+
+
+# ---------- Structured questions ----------
+
+def _q(qid, text, field="line 1 annual_qty", example="60,000", propose=False):
+    return {"id": qid, "text": text, "example": example, "field": field, "allow_vendors_propose": propose}
+
+
+def test_parse_reply_with_three_questions():
+    parsed = {"summary": "Added the kettle carton line. ",
+              "questions": [_q("Q1", "How many kettle cartons a year?"),
+                            _q("Q2", "Inside size (L x W x H mm)?", "line 1 size", "310 x 150 x 140"),
+                            _q("Q3", "Board grade?", "line 1 board_spec", "150/120/150 GSM", propose=True)],
+              "rfx_draft": empty_draft()}
+    summary, questions = parse_reply(parsed)
+    assert summary == "Added the kettle carton line."
+    assert [q["id"] for q in questions] == ["Q1", "Q2", "Q3"]
+    assert questions[0]["example"] == "60,000" and questions[1]["field"] == "line 1 size"
+    assert [q["allow_vendors_propose"] for q in questions] == [False, False, True]
+    assert reply_text(summary, questions).splitlines()[1] == "Q1 (line 1 annual_qty): How many kettle cartons a year?"
+
+
+def test_parse_reply_enforces_max_three_questions():
+    parsed = {"summary": "s", "questions": [_q(f"Q{i}", f"Question {i}?") for i in range(1, 6)]}
+    _, questions = parse_reply(parsed)
+    assert MAX_FOLLOW_UPS == 3
+    assert [q["text"] for q in questions] == ["Question 1?", "Question 2?", "Question 3?"]
+
+
+def test_cap_questions_drops_blanks_and_renumbers():
+    qs = cap_questions([_q("Q1", "  "), _q("Q7", "How many?"), _q("Q2", "Size?")])
+    assert [(q["id"], q["text"]) for q in qs] == [("Q1", "How many?"), ("Q2", "Size?")]
+
+
+def test_tagged_answers_string():
+    qs = [_q("Q1", "How many kettle cartons a year?"),
+          _q("Q2", "Inside size?", "line 1 size"),
+          _q("Q3", "Board grade?", "line 1 board_spec", propose=True)]
+    out = tagged_answers(qs, {"Q1": " 60,000 ", "Q2": "", "Q3": ""}, {"Q3": True})
+    assert out == "Q1 (line 1 annual_qty): 60,000 / Q2: skipped / Q3 (line 1 board_spec): vendors to propose"
+
+
+def test_tagged_answers_propose_keeps_typed_note():
+    qs = [_q("Q1", "Board grade?", "line 1 board_spec", propose=True)]
+    expected = "Q1 (line 1 board_spec): vendors to propose; at least BF 18"
+    assert tagged_answers(qs, {"Q1": "at least BF 18"}, {"Q1": True}) == expected
+
+
+def test_tags_are_not_read_as_stated_numbers():
+    text = strip_tags("Q1 (line 1 annual_qty): 60,000 / Q2: skipped")
+    assert numbers_in_text(text) == {60000.0}
+
+
+def test_parse_reply_keeps_only_first_of_a_combined_question():
+    parsed = {"summary": "s", "questions": [
+        _q("Q1", "What are the kettle carton dimensions (L x W x H, mm)? And how many plies?", "line 1 size"),
+        _q("Q2", "Board grade?", "line 1 board_spec")]}
+    _, questions = parse_reply(parsed)
+    assert [q["text"] for q in questions] == ["What are the kettle carton dimensions (L x W x H, mm)?",
+                                              "Board grade?"]
+    assert questions[0]["field"] == "line 1 size"

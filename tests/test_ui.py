@@ -2,7 +2,8 @@
 
 from aera.compare import COMPARABLE, FAIL, NOT_COMPARABLE, NOT_QUOTED, PASS, UNCLEAR, WITH_ASSUMPTION
 from aera.ui import (
-    STEPS, badge_color, badge_md, has_high_risk, header_html, sidebar_sections, split_headline, status_text_md, stepper_html, tint,
+    STEPS, badge_color, badge_md, has_high_risk, header_html, rfx_status, severity_counts_text, sidebar_sections,
+    split_headline, status_text_md, stepper_html, tint,
 )
 from ui.state import (
     ASK_HISTORY, AWARD_CONFIRMED, EVENT, RFX_SENT_LOG, SENT_LOG, completed_steps,
@@ -103,3 +104,20 @@ def test_page_header_is_one_block_with_escaped_text():
     out = header_html("Ask", "Vendors <A> & B.")
     assert out.startswith("<h2 ") and "line-height: 1.2" in out and "<p " in out
     assert "&lt;A&gt; &amp; B." in out and "Next:" not in out
+
+
+def test_severity_counts_high_first_and_skip_empty():
+    items = [{"severity": "medium"}, {"severity": "high"}, {"severity": "medium"}]
+    assert severity_counts_text(items) == "1 high · 2 medium"
+    assert severity_counts_text([{"severity": "low"}]) == "1 low"
+
+
+def test_no_open_items_says_nothing_to_clarify():
+    assert severity_counts_text([]) == "Nothing to clarify"
+
+
+def test_rfx_status_amber_until_every_check_passes():
+    text, kind = rfx_status(3, 5)
+    assert text == "Draft · 3 of 5 checks" and badge_color(kind) == "orange"
+    text, kind = rfx_status(5, 5)
+    assert text == "Ready to send" and badge_color(kind) == "green"

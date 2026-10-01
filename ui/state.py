@@ -26,6 +26,8 @@ RFX_CHAT = "rfx_chat"  # Create RFx chat: [{"role", "content", "notes"}]
 RFX_DRAFT = "rfx_draft"  # the draft RFx being built (aera.rfx_builder.empty_draft() shape)
 RFX_TABLE_VERSION = "rfx_table_version"  # bumped when Claude updates the draft, so the table resets
 RFX_SENT_LOG = "rfx_sent_log"  # [{"Vendor", "Email", "Time", "Status"}] for the simulated RFx send
+RFX_PROCESSED = "rfx_processed"  # chat submission ids already sent, so none is sent twice
+RFX_PENDING = "rfx_pending"  # None, or {"status": queued | running | failed, "error"} for the newest message
 
 DEFAULT_FX_USD = FX_RATES["USD"]
 
@@ -47,6 +49,8 @@ def init_state() -> None:
     st.session_state.setdefault(RFX_DRAFT, empty_draft())
     st.session_state.setdefault(RFX_TABLE_VERSION, 0)
     st.session_state.setdefault(RFX_SENT_LOG, [])
+    st.session_state.setdefault(RFX_PROCESSED, set())
+    st.session_state.setdefault(RFX_PENDING, None)
 
 
 def get_event() -> Event | None:

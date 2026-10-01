@@ -72,15 +72,27 @@ class RfxDraft(BaseModel):
     quality_bar: DraftQualityBar
 
 
+class Question(BaseModel):
+    id: str = Field(description="'Q1', 'Q2', 'Q3' in the order asked.")
+    text: str = Field(description="One short question, e.g. 'How many kettle cartons a year?'")
+    example: str = Field(description="A short example answer, e.g. '60,000'.")
+    field: str = Field(description="The RFx field the answer fills, e.g. 'line 1 annual_qty', "
+                                   "'line 2 board_spec' or 'terms delivery'.")
+    allow_vendors_propose: bool = Field(description="true if 'vendors to propose' is a sensible answer "
+                                                    "(spec, print, payment terms). Never for quantities.")
+
+
 class TurnOutput(BaseModel):
-    reply_to_buyer: str = Field(description="Your short reply to the buyer, ending with at most "
-                                            f"{MAX_FOLLOW_UPS} short follow-up questions. Plain text.")
+    summary: str = Field(description="1 to 2 short sentences on what changed in the RFx this turn. Plain text.")
+    questions: list[Question] = Field(description=f"At most {MAX_FOLLOW_UPS} follow-up questions, most "
+                                                  "important first. Empty when nothing is missing.")
     rfx_draft: RfxDraft
 
 
 SYSTEM = f"""You help a procurement buyer write an RFx (request for quotes) by chatting with them.
 
-Every turn you return two things: a short reply to the buyer, and the full updated RFx draft.
+Every turn you return three things: a short summary of what changed, up to {MAX_FOLLOW_UPS} follow-up
+questions, and the full updated RFx draft.
 
 Rules for the draft:
 - Start from the current draft you are given. It includes edits the buyer made by hand in the
@@ -92,15 +104,26 @@ Rules for the draft:
   total for several items, ask how it splits instead of dividing it yourself.
 - Never put prices or budgets in the draft.
 - One line per distinct item the buyer needs.
+- If the buyer answers "vendors to propose", write "Vendors to propose" in that text field.
 - You may propose a standard vendor questionnaire (certificates, capacity, lead time, defect rate,
-  payment terms) and standard quoting terms (e.g. 'INR per piece, ex-GST'); say in your reply that
+  payment terms) and standard quoting terms (e.g. 'INR per piece, ex-GST'); say in the summary that
   you proposed them so the buyer can change them.
 
-Rules for the reply:
-- Ask at most {MAX_FOLLOW_UPS} short follow-up questions per turn, the most important gaps first:
-  quantities, specs (ply, board grade, size, print), delivery location, quality requirements,
-  then commercial terms.
-- Be brief and plain. No markdown tables. Do not repeat the whole draft back."""
+Rules for the summary and questions:
+- summary: 1 to 2 short plain sentences on what changed in the RFx this turn. Do not repeat the
+  whole draft back. No markdown.
+- Each question asks exactly ONE thing. Never combine two questions ("What size? And which ply?"
+  is two questions: ask one now and the other later).
+- If an answer covers only part of what was asked or is unclear (e.g. "yea mm" to a dimensions
+  question), keep that field empty and ask again, saying what is missing (e.g. "I still need the
+  length, width and height in mm for the kettle carton.").
+- questions: NEVER more than {MAX_FOLLOW_UPS}. Ask the rest next turn. Order: items and quantities
+  first, then size and spec (ply, board grade, print), then quality requirements and commercial
+  terms, delivery last. One short question each, ids Q1, Q2, Q3, a short example answer, and the
+  field it fills.
+- Answers may come back tagged, e.g. "Q1 (line 1 annual_qty): 60,000 / Q2: skipped". Map each answer
+  to its question. Ask skipped questions again in a later turn.
+- If the buyer writes freely instead, map what they say to the open questions where you can."""
 
 
 # ---------- Draft helpers (pure) ----------
@@ -174,14 +197,14 @@ def guard_numbers(new: dict, old: dict, buyer_texts: list[str]) -> tuple[dict, l
             v = ln.get(f)
             if v is not None and not _stated(float(v), allowed):
                 ln[f] = None
-                notes.append(f"Line {i} ({ln.get('description') or 'no description'}): Claude filled "
+                notes.append(f"Line {i} ({ln.get('description') or 'no description'}): Aera guide filled "
                              f"{label} {v:g}, but you haven't stated that number, so it is left blank.")
     qb_new, qb_old = new["quality_bar"], old["quality_bar"]
     v = qb_new.get("max_defect_rate_pct")
     old_v = qb_old.get("max_defect_rate_pct")
     if v is not None and not _stated(float(v), stated | ({old_v} if old_v is not None else set())):
         qb_new["max_defect_rate_pct"] = None
-        notes.append(f"Claude filled a maximum defect rate of {v:g}%, but you haven't stated that number, "
+        notes.append(f"Aera guide filled a maximum defect rate of {v:g}%, but you haven't stated that number, "
                      "so it is left blank.")
     return new, notes
 
@@ -256,14 +279,68 @@ def build_messages(history: list[dict], draft: dict) -> list[dict]:
     return messages
 
 
-def next_turn(history: list[dict], draft: dict, call: Caller | None = None) -> tuple[str, dict, list[str], dict]:
+def one_question(text: str) -> str:
+    """Only the first question when Claude combined several ('What size? And which ply?' -> 'What size?')."""
+    text = (text or "").strip()
+    first = text.find("?")
+    return text[:first + 1] if first != -1 and "?" in text[first + 1:] else text
+
+
+def cap_questions(questions: list[dict]) -> list[dict]:
+    """At most MAX_FOLLOW_UPS questions, numbered Q1, Q2, Q3 in order, each asking one thing.
+
+    Blank questions are dropped. A combined question keeps only its first part; Claude asks the rest later."""
+    questions = [{**q, "text": one_question(q.get("text"))} for q in questions]
+    kept = [q for q in questions if q["text"]][:MAX_FOLLOW_UPS]
+    return [{**q, "id": f"Q{i}", "text": q["text"].strip(), "example": (q.get("example") or "").strip(),
+             "field": (q.get("field") or "").strip()} for i, q in enumerate(kept, start=1)]
+
+
+def parse_reply(parsed: dict) -> tuple[str, list[dict]]:
+    """(summary, questions) from Claude's structured reply, with the question cap enforced in code."""
+    questions = [Question.model_validate(q).model_dump() for q in parsed.get("questions") or []]
+    return (parsed.get("summary") or "").strip(), cap_questions(questions)
+
+
+def reply_text(summary: str, questions: list[dict]) -> str:
+    """The assistant turn as plain text for the chat history Claude sees on the next turn."""
+    return "\n".join([summary, *(f"{q['id']} ({q['field']}): {q['text']}" for q in questions)]).strip()
+
+
+VENDORS_PROPOSE = "vendors to propose"
+
+
+def tagged_answers(questions: list[dict], answers: dict[str, str], propose: dict[str, bool]) -> str:
+    """The answer form as one message: 'Q1 (line 1 annual_qty): 60,000 / Q2: skipped'.
+
+    `answers` and `propose` are keyed by question id. A blank answer with no tick is skipped."""
+    parts = []
+    for q in questions:
+        text = (answers.get(q["id"]) or "").strip()
+        if propose.get(q["id"]):
+            text = VENDORS_PROPOSE + (f"; {text}" if text else "")
+        parts.append(f"{q['id']} ({q['field']}): {text}" if text else f"{q['id']}: skipped")
+    return " / ".join(parts)
+
+
+_TAG = re.compile(r"\bQ\d+\s*(?:\([^)]*\))?\s*:")
+
+
+def strip_tags(text: str) -> str:
+    """Buyer text without the 'Q1 (line 1 annual_qty):' tags, so 'line 1' isn't read as a stated number."""
+    return _TAG.sub(" ", text or "")
+
+
+def next_turn(history: list[dict], draft: dict, call: Caller | None = None
+              ) -> tuple[str, list[dict], dict, list[str], dict]:
     """One chat turn. `history` ends with the buyer's new message; `draft` includes their table edits.
 
-    Returns (reply, checked draft, notes on numbers code blanked, usage)."""
+    Returns (summary, questions, checked draft, notes on numbers code blanked, usage)."""
     parsed, usage = (call or _ask_claude)(SYSTEM, build_messages(history, draft), TurnOutput,
                                           TURN_MAX_TOKENS, "create rfx")
+    summary, questions = parse_reply(parsed)
     new = RfxDraft.model_validate(parsed["rfx_draft"]).model_dump()
     new["lines"] = rows_to_lines(new["lines"])  # tidy blank strings into None
-    buyer_texts = [h["content"] for h in history if h["role"] == "user"]
+    buyer_texts = [strip_tags(h["content"]) for h in history if h["role"] == "user"]
     new, notes = guard_numbers(new, draft, buyer_texts)
-    return parsed["reply_to_buyer"].strip(), new, notes, usage
+    return summary, questions, new, notes, usage

@@ -9,13 +9,13 @@ from aera.config import FX_DATE, FX_RATES, FX_SOURCE
 from aera.event import NotAQuote, add_reply, reextract_all
 from aera.extract import ExtractionError
 from aera.ui import render_sidebar, sidebar_sections
+from ui.create_page import open_sample
 from ui.state import (
     API_CALLS, DECISIONS, DEFAULT_FX_USD, FX_EXTRA_DATE, FX_EXTRA_RATE, FX_USD, REJECTED_UPLOAD, UPLOADS_DONE, fx_is_default, get_event,
     keep_fx_values, load_sample, md, set_event,
 )
 
 UPLOAD_TYPES = ["xlsx", "docx", "pdf", "eml", "jpg", "jpeg", "png"]
-FOOTER = "Concept prototype. Not an Aerchain product."
 
 
 def render(page: str) -> None:
@@ -23,7 +23,15 @@ def render(page: str) -> None:
     if "Assumptions" not in sidebar_sections(page):
         keep_fx_values()  # the FX inputs aren't drawn on this page, so Streamlit would drop their values
     # Event comes before Assumptions, so a currency in a reply added on this run gets its rate box at once.
-    render_sidebar(page, {"Event": _event, "Assumptions": _assumptions, "Session": _session})
+    render_sidebar(page, {"Event": _event, "Assumptions": _assumptions, "Session": _session},
+                   setup_note=_sample_shortcut)
+
+
+def _sample_shortcut() -> None:
+    """Small text button on setup pages: jump to the sample event instead of waiting for replies."""
+    if st.button("Skip ahead: open the sample event with 5 replies", type="tertiary",
+                 key="sidebar_open_sample", icon=":material/arrow_forward:"):
+        open_sample()
 
 
 def _event() -> None:
@@ -39,16 +47,11 @@ def _assumptions() -> None:
 
 def _session() -> None:
     _api_cost()
-    st.caption(FOOTER)
 
 
 def _api_cost() -> None:
-    calls = st.session_state[API_CALLS]
-    total = sum(u["cost_usd"] for u in calls)
-    tokens_in = sum(u["input_tokens"] + u["cache_write_tokens"] + u["cache_read_tokens"] for u in calls)
-    tokens_out = sum(u["output_tokens"] for u in calls)
-    st.caption(f"API cost so far: **~${total:.4f}**")
-    st.caption(f"Create RFx, Ask and Clarify · {len(calls)} calls · {tokens_in:,} tokens in, {tokens_out:,} out")
+    total = sum(u["cost_usd"] for u in st.session_state[API_CALLS])
+    st.caption(f"AI cost this session: **${total:.2f}**")
 
 
 def _load_sample() -> None:

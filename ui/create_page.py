@@ -13,17 +13,23 @@ import pandas as pd
 import streamlit as st
 
 from aera.analyst import AnalystError
-from aera.ui import card, info_strip, metric_row, page_header
+from aera.ui import card, metric_row, page_header, rfx_status, status_badge
 from ui import compare_page
 from aera.rfx_builder import (
     GREETING, LINE_FIELDS, _blank, checklist, is_complete, load_vendor_list, next_turn, quality_bar_set,
-    rows_to_lines, to_rfx_json,
+    reply_text, rows_to_lines, tagged_answers, to_rfx_json,
 )
 from ui.state import (
-    API_CALLS, RFX_CHAT, RFX_DRAFT, RFX_SENT_LOG, RFX_TABLE_VERSION, get_event, load_sample, md, now_text,
+    API_CALLS, RFX_CHAT, RFX_DRAFT, RFX_PENDING, RFX_PROCESSED, RFX_SENT_LOG, RFX_TABLE_VERSION, get_event, load_sample, md,
+    now_text,
 )
 
-VENDORS_PATH = Path(__file__).resolve().parent.parent / "data" / "sample" / "vendors.json"
+ROOT = Path(__file__).resolve().parent.parent
+VENDORS_PATH = ROOT / "data" / "sample" / "vendors.json"
+ASSISTANT_AVATAR = str(ROOT / "assets" / "icon.svg")  # the AC mark
+BUYER_AVATAR = ":material/person:"
+ASSISTANT_NAME = "Aera guide"
+OPEN_QUESTIONS_HINT = "Answer the questions above, or type anything else"
 
 STARTERS = ("Shipper cartons for small appliances", "Heavy-duty 7-ply cartons", "Layer pads and partitions")
 
@@ -49,23 +55,18 @@ COLUMN_CONFIG = {
 
 
 def render() -> None:
-    page_header("Create RFx", "Describe what you need and Claude drafts the request for quotes with you.")
-    if info_strip("Want to see what happens when replies come back? A sample event with 5 vendor "
-                  "replies is ready.", "Open the sample event", key="sample_strip"):
-        _open_sample()
-    st.caption("Claude asks follow-up questions and fills in the draft; code blanks any number you haven't "
-               "stated. Each message uses API credit (see the sidebar).")
-
+    page_header("Create RFx", "Describe what you need and Aera guide drafts the request for quotes with you.")
     draft = st.session_state[RFX_DRAFT]
-    chat_col, doc_col = st.columns([45, 55], gap="large")
+    # Both columns start with a bordered box, so their tops line up.
+    chat_col, doc_col = st.columns([45, 55], gap="large", vertical_alignment="top")
     with doc_col:
         _document(draft)
     with chat_col:
         _chat(draft)
 
 
-def _open_sample() -> None:
-    """Load the sample event and go to Compare. An event already loaded is kept, with its review decisions."""
+def open_sample() -> None:
+    """Load the sample event and go to Compare. Also used by the sidebar shortcut. An event already loaded is kept, with its review decisions."""
     if get_event() is None:
         load_sample()
     st.switch_page(compare_page.page())
@@ -73,8 +74,10 @@ def _open_sample() -> None:
 
 # ---------- Chat ----------
 
-def placeholder(draft: dict) -> str:
+def placeholder(draft: dict, questions_open: bool = False) -> str:
     """Chat box hint: the next thing the draft needs, worked out in code from the draft."""
+    if questions_open:
+        return OPEN_QUESTIONS_HINT
     lines = draft["lines"]
     if not lines:
         return "Describe what you need, e.g. 3-ply cartons for kettles, 60,000 a year, delivered to Chakan"
@@ -89,6 +92,21 @@ def placeholder(draft: dict) -> str:
     return "Anything to change? Otherwise, click Send to vendors"
 
 
+def open_questions(history: list[dict]) -> list[dict]:
+    """Questions on the latest assistant message; none once the buyer has replied to it."""
+    if history and history[-1]["role"] == "assistant":
+        return history[-1].get("questions") or []
+    return []
+
+
+def claim_submission(processed: set[str], submission_id: str) -> bool:
+    """True the first time a submission id is seen, False after that, so nothing is sent twice."""
+    if submission_id in processed:
+        return False
+    processed.add(submission_id)
+    return True
+
+
 def _item_name(line: dict, number: int) -> str:
     desc = (line.get("description") or "").strip()
     if not desc:
@@ -98,37 +116,112 @@ def _item_name(line: dict, number: int) -> str:
 
 def _chat(draft: dict) -> None:
     history = st.session_state[RFX_CHAT]
-    starter = None
+    pending = st.session_state[RFX_PENDING]
+    busy = pending is not None and pending["status"] != "failed"
+    settled = history[:-1] if pending else history  # the chat as of the last reply
+    questions = open_questions(settled)
+    sent = None
     with st.container(height=560):
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
+            _assistant_label()
             st.markdown(GREETING)
             if not history:
                 st.caption("Or start from one of these:")
                 with st.container(horizontal=True):
                     for i, text in enumerate(STARTERS):
                         if st.button(text, key=f"rfx_starter_{i}", icon=":material/add:"):
-                            starter = text
-        for msg in history:
-            with st.chat_message(msg["role"]):
-                st.markdown(md(msg["content"]))
+                            sent = text
+        for n, msg in enumerate(history):
+            if msg["role"] == "user":
+                with st.chat_message("user", avatar=BUYER_AVATAR):
+                    st.markdown(md(msg["content"]))
+                continue
+            with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
+                _assistant_label()
+                st.markdown(md(msg.get("summary", msg["content"])))
                 for note in msg.get("notes", []):
                     st.caption(f"Check: {md(note)}")
+                if questions and n == len(settled) - 1:
+                    sent = _answer_form(questions, key=f"rfx_answers_{n}", busy=busy) or sent
+        if pending:
+            with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
+                _assistant_label()
+                if busy:
+                    _run_pending(draft)
+                else:
+                    st.markdown(f"Sorry, that didn't go through. {md(pending['error'])}")
+                    if st.button("Try again", key="rfx_retry", icon=":material/refresh:") and \
+                            claim_submission(st.session_state[RFX_PROCESSED], f"turn-{len(settled)}"):
+                        st.session_state[RFX_PENDING] = {"status": "queued"}
+                        st.rerun()
 
-    prompt = st.chat_input(placeholder(draft)) or starter
-    if prompt:
-        _send(prompt, draft)
+    hint = f"{ASSISTANT_NAME} is drafting your RFx..." if busy else placeholder(draft, bool(questions))
+    sent = st.chat_input(hint, disabled=busy) or sent
+    st.caption(f"{ASSISTANT_NAME} asks follow-up questions and fills in the draft; code blanks any number you "
+               "haven't stated. Each message uses API credit (see the sidebar).")
+    # Widgets return a value only on the run they were submitted, so the API is called only then.
+    # The id ties a submission to the chat turn it answers, so a stray rerun can't send it again.
+    if sent and claim_submission(st.session_state[RFX_PROCESSED], f"turn-{len(settled)}"):
+        _queue(sent)
 
 
-def _send(prompt: str, draft: dict) -> None:
-    turn = st.session_state[RFX_CHAT] + [{"role": "user", "content": prompt}]
+def _assistant_label() -> None:
+    st.markdown(f":small[**{ASSISTANT_NAME}**]")
+
+
+def _answer_form(questions: list[dict], key: str, busy: bool = False) -> str | None:
+    """One input per open question, plus a 'Vendors to propose' tick where it makes sense.
+
+    Greyed out while a reply is being drafted. Returns the tagged answer message on submit, else None."""
+    answers, propose = {}, {}
+    with st.form(key, border=False):
+        for i, q in enumerate(questions, start=1):
+            st.markdown(f"**{i}. {md(q['text'])}**")
+            answers[q["id"]] = st.text_input(q["text"], placeholder=q["example"], key=f"{key}_{q['id']}",
+                                             label_visibility="collapsed", disabled=busy)
+            if q["allow_vendors_propose"]:
+                propose[q["id"]] = st.checkbox("Vendors to propose", key=f"{key}_{q['id']}_propose",
+                                               disabled=busy)
+        if st.form_submit_button("Drafting..." if busy else "Send answers", type="primary",
+                                 icon=":material/send:", disabled=busy):
+            return tagged_answers(questions, answers, propose)
+    return None
+
+
+def _queue(prompt: str) -> None:
+    """Show the buyer's message straight away; the next run makes the API call under it."""
+    history = st.session_state[RFX_CHAT]
+    if st.session_state[RFX_PENDING] is not None:  # a failed message is replaced by the new one
+        history = history[:-1]
+    st.session_state[RFX_CHAT] = history + [{"role": "user", "content": prompt}]
+    st.session_state[RFX_PENDING] = {"status": "queued"}
+    st.rerun()
+
+
+def _fail(error: str) -> None:
+    st.session_state[RFX_PENDING] = {"status": "failed", "error": error}
+    # The buyer may send this turn again (Try again, or a new message).
+    st.session_state[RFX_PROCESSED].discard(f"turn-{len(st.session_state[RFX_CHAT]) - 1}")
+    st.rerun()
+
+
+def _run_pending(draft: dict) -> None:
+    """The API call for the buyer's newest message, with a spinner in the reply bubble."""
+    pending = st.session_state[RFX_PENDING]
+    if pending["status"] == "running":
+        # An earlier run started this call and was cut off (e.g. the page was left), so don't resend by itself.
+        _fail("The request was interrupted before the reply arrived.")
+    pending["status"] = "running"
+    turn = st.session_state[RFX_CHAT]
     try:
-        with st.spinner("Claude is updating the draft..."):
-            reply, new_draft, notes, usage = next_turn(turn, draft)
+        with st.spinner(f"{ASSISTANT_NAME} is drafting your RFx..."):
+            summary, questions, new_draft, notes, usage = next_turn(turn, draft)
     except AnalystError as e:
-        st.error(f"{e} Your message was not sent; please try again.")
-        return
+        _fail(str(e))
     st.session_state[API_CALLS].append(usage)
-    st.session_state[RFX_CHAT] = turn + [{"role": "assistant", "content": reply, "notes": notes}]
+    st.session_state[RFX_CHAT] = turn + [{"role": "assistant", "content": reply_text(summary, questions),
+                                          "summary": summary, "questions": questions, "notes": notes}]
+    st.session_state[RFX_PENDING] = None
     st.session_state[RFX_DRAFT] = new_draft
     st.session_state[RFX_TABLE_VERSION] += 1  # fresh table for the new lines
     st.rerun()
@@ -148,10 +241,7 @@ def _document(draft: dict) -> None:
             st.markdown(f"#### {md(draft.get('title') or 'Untitled RFx')}")
             st.caption(f"{rfx_id} · Draft started {date.today():%d %b %Y}")
         with pill, st.container(horizontal_alignment="right"):
-            if complete:
-                st.badge("Ready to send", icon=":material/check_circle:", color="green")
-            else:
-                st.badge(f"Draft · {done} of {len(items)} checks done", color="gray")
+            status_badge(*rfx_status(done, len(items)))
         st.progress(done / len(items))
 
         st.markdown("**Line items**")
@@ -289,8 +379,12 @@ def _actions(draft: dict, rfx_id: str, complete: bool) -> None:
         st.markdown("**Sent**")
         st.markdown("  \n".join(f":green[●] **{md(e['Vendor'])}** · {md(e['Email'])} · :gray[{e['Time']}]"
                                 for e in reversed(log)))
-        st.caption("Sending is simulated: nothing was emailed. Replies arrive over the next few days.")
-    st.caption("The sample event on the Compare page shows what happens when replies come back.")
+        st.caption("Sending is simulated: nothing was emailed.")
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.caption("Replies usually take a few days. See what happens when five replies come back.",
+                       width="stretch")
+            if st.button("Open the sample event", key="rfx_open_sample", width="content"):
+                open_sample()
 
 
 @st.dialog("Send to vendors")

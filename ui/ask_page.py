@@ -71,12 +71,16 @@ def _answer(event, question: str) -> None:
     comparison, summary = comparison_tables(event)
     rates, fx_date = fx_settings()
     data = analyst_data(comparison, summary, event.rfx, event.last_year, rates, fx_date)
-    with st.spinner("Working it out..."):
-        try:
-            answer = ask(question, data)
-        except AnalystError as e:
-            st.error(f"Could not answer \"{question}\": {e}")
-            return
+    # The spinner sits where the answer card will appear.
+    st.divider()
+    with card():
+        st.caption(f"You asked: {md(question)}")
+        with st.spinner("Working it out..."):
+            try:
+                answer = ask(question, data)
+            except AnalystError as e:
+                st.error(f"Could not answer this one: {e}")
+                return
     st.session_state[API_CALLS].extend(answer.usages)
     st.session_state[ASK_HISTORY].insert(0, answer)
     st.rerun()  # redraw so the sidebar cost includes this answer

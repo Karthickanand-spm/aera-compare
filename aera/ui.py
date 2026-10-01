@@ -10,7 +10,9 @@ from collections.abc import Callable, Iterable
 
 import streamlit as st
 
-from aera.compare import COMPARABLE, FAIL, NOT_COMPARABLE, NOT_QUOTED, PASS, UNCLEAR, WITH_ASSUMPTION
+from aera.compare import (
+    COMPARABLE, FAIL, NOT_COMPARABLE, NOT_QUOTED, PASS, SEVERITY_ORDER, UNCLEAR, WITH_ASSUMPTION,
+)
 
 # The buyer's path through the app. Names match the page titles in app.py.
 STEPS = ("Create RFx", "Compare", "Ask", "Decide", "Clarify")
@@ -21,6 +23,8 @@ BADGE_COLORS = {
     PASS: "green", FAIL: "red", UNCLEAR: "orange",
     "HIGH": "red", "MEDIUM": "orange", "LOW": "gray",
     COMPARABLE: "green", WITH_ASSUMPTION: "blue", NOT_COMPARABLE: "red", NOT_QUOTED: "gray",
+    # RFx draft status on the Create RFx page.
+    "DRAFT": "orange", "READY": "green",
 }
 DEFAULT_BADGE_COLOR = "gray"
 
@@ -43,10 +47,8 @@ _STYLES = f"""
 [data-testid="stSidebarUserContent"] {{ padding-top: 0.5rem; }}
 [data-testid="stSidebarUserContent"] hr {{ margin: 1rem 0 0.75rem 0; }}
 
-/* Sidebar: small grey line under the logo (the nav sits directly below the logo), and small uppercase
-   grey labels for the nav section and each control group. Semi-transparent grey reads in light and dark. */
-[data-testid="stSidebarNav"]::before {{ content: "Concept prototype"; display: block; margin: -1rem 0 1rem 0;
-  font-size: 0.8rem; color: rgba(128, 128, 128, 0.95); }}
+/* Sidebar: small uppercase grey labels for the nav section and each control group.
+   Semi-transparent grey reads in light and dark. */
 /* Each sidebar group draws its own divider, so Streamlit's line under the menu would double up. */
 [data-testid="stSidebarNavSeparator"] {{ display: none; }}
 .aera-side-label, [data-testid="stNavSectionHeader"] {{ font-size: 0.75rem; font-weight: 600;
@@ -71,6 +73,9 @@ _STYLES = f"""
 /* "What to watch" expander under an answer: amber edge and tint, theme text colour on top. */
 [class*="st-key-aera-watch"] details {{ border-color: rgba(245, 158, 11, 0.7);
   background: {TINTS["orange"]}; }}
+
+/* Clarify: the selected vendor's card gets a teal edge. */
+[class*="st-key-aera-picked"] {{ border-color: {TEAL} !important; box-shadow: inset 0 0 0 1px {TEAL}; }}
 </style>
 """
 
@@ -142,6 +147,20 @@ def status_text_md(text: str, kind: str | None = None) -> str:
     return f":{badge_color(kind or text)}[**{safe}**]"
 
 
+def severity_counts_text(items: Iterable[dict]) -> str:
+    """Open items counted by severity, high first: "1 high · 2 medium", or "Nothing to clarify"."""
+    sevs = [it["severity"] for it in items]
+    parts = [f"{sevs.count(s)} {s}" for s in SEVERITY_ORDER if s in sevs]
+    return " · ".join(parts) if parts else "Nothing to clarify"
+
+
+def rfx_status(done: int, total: int) -> tuple[str, str]:
+    """(text, badge kind) for the RFx draft pill: amber while checks are open, green when all pass."""
+    if done >= total:
+        return "Ready to send", "READY"
+    return f"Draft · {done} of {total} checks", "DRAFT"
+
+
 def tint(kind: str) -> str:
     """CSS background for a table cell, in the badge colour for `kind`."""
     return f"background-color: {TINTS[badge_color(kind)]}"
@@ -169,15 +188,6 @@ def empty_state(message: str, button_label: str, on_click: Callable[[], None], k
         if st.button(button_label, type="primary", key=key):
             on_click()
             st.rerun()  # redraw the whole page, sidebar included, with the result
-
-
-def info_strip(message: str, button_label: str, key: str) -> bool:
-    """A slim bordered strip: an info icon, one line of text and a button on the right.
-
-    Returns True on the run the button is clicked."""
-    with st.container(border=True, horizontal=True, vertical_alignment="center", key=key):
-        st.markdown(f":material/info: {message}", width="stretch")
-        return st.button(button_label, key=f"{key}_button", width="content")
 
 
 # ---------- Answer cards ----------
@@ -218,7 +228,6 @@ SIDEBAR_SECTIONS = ("Event", "Assumptions", "Session")
 SIDEBAR_ICONS = {"Event": "📂", "Assumptions": "⚙️", "Session": "📊"}
 # Pages where the buyer is still writing the RFx: no event or FX rates to show yet.
 SETUP_PAGES = ("Start here", "Create RFx")
-SETUP_SIDEBAR_NOTE = "Vendor replies come in on the Compare page."
 
 
 def sidebar_sections(page: str) -> tuple[str, ...]:
@@ -226,12 +235,14 @@ def sidebar_sections(page: str) -> tuple[str, ...]:
     return ("Session",) if page in SETUP_PAGES else SIDEBAR_SECTIONS
 
 
-def render_sidebar(page: str, draw: dict[str, Callable[[], None]]) -> None:
-    """Draw the sidebar for `page`. `draw` maps each section name to the function that fills it."""
+def render_sidebar(page: str, draw: dict[str, Callable[[], None]],
+                   setup_note: Callable[[], None] | None = None) -> None:
+    """Draw the sidebar for `page`. `draw` maps each section name to the function that fills it.
+    `setup_note` fills the top of the sidebar on setup pages, where there is no Event section."""
     shown = sidebar_sections(page)
     with st.sidebar:
-        if "Event" not in shown:
-            st.caption(SETUP_SIDEBAR_NOTE)
+        if "Event" not in shown and setup_note:
+            setup_note()
         for name in shown:
             st.divider()  # every group starts with a line, which also separates the first from the menu
             sidebar_section(name)
