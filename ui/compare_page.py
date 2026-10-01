@@ -14,6 +14,7 @@ from aera.compare import (
     USE_EXTRACTED, WITH_ASSUMPTION, buyer_decision, find_snippet_span,
 )
 from aera.event import Event
+from aera.normalize import describe_rates
 from ui.state import DECISIONS, comparison_tables, fx_settings, get_event, md, now_text
 
 FORMAT_NAMES = {"excel": "Excel", "word": "Word", "email": "Email", "pdf": "PDF", "image": "Photo"}
@@ -95,8 +96,11 @@ def _vendor_card(event: Event, s, n_lines: int) -> None:
 def _grid(event: Event, comparison: pd.DataFrame) -> None:
     st.subheader("Price comparison")
     rates, fx_date = fx_settings()
-    st.caption(f"INR per piece. USD converted at {rates['USD']:.2f} INR ({fx_date}). "
-               "Not comparable and Not quoted cells are left out of totals.")
+    gaps = sorted({c for c in comparison["missing_fx_currency"] if isinstance(c, str)})
+    no_rate = (f" No rate yet for {', '.join(gaps)}: enter it in the sidebar to convert those prices."
+               if gaps else "")
+    st.caption(f"INR per piece. FX: {describe_rates(rates, fx_date)}. "
+               f"Not comparable and Not quoted cells are left out of totals.{no_rate}")
     st.markdown(
         "**Legend:** `12.34` Comparable · `12.34 ≈` Comparable with assumption · "
         "`12.34 ≠` Not comparable · `Not quoted` vendor skipped the line (never 0) · "
@@ -139,7 +143,8 @@ def _cell_text(r) -> str:
     if r["label"] == NOT_QUOTED:
         text = "Not quoted"
     elif _missing(r["price_inr_per_piece"]):
-        text = "No price" + LABEL_MARKS.get(r["label"], "")
+        fx_gap = r["missing_fx_currency"]
+        text = (f"No {fx_gap} rate" if isinstance(fx_gap, str) else "No price") + LABEL_MARKS.get(r["label"], "")
     else:
         text = f"{r['price_inr_per_piece']:,.2f}" + LABEL_MARKS.get(r["label"], "")
     if r["buyer_confirmed"]:
@@ -310,6 +315,10 @@ def _review_row(r) -> None:
         st.button("Undo decision", key=f"undo|{wkey}", on_click=_undo, args=(key,))
         return
 
+    if r["missing_fx_currency"]:
+        _fx_gap_actions(r, key, wkey)
+        return
+
     use_label = "Keep as Not quoted" if r["label"] == NOT_QUOTED else "Use this price"
     alts = [(i, a) for i, a in enumerate(r["alternatives"]) if a["price_inr_per_piece"] is not None]
     cols = st.columns(2 + len(alts))
@@ -320,11 +329,26 @@ def _review_row(r) -> None:
                    key=f"alt{i}|{wkey}", on_click=_decide, args=(key, USE_ALTERNATIVE),
                    kwargs={"alternative_index": i}, width="stretch")
     with cols[-1].popover("Edit", width="stretch"):
-        value = st.number_input("INR per piece", min_value=0.01, step=0.01, format="%.2f",
-                                value=None if _missing(price) else float(price),
-                                key=f"edit_value|{wkey}")
-        st.button("Save price", key=f"save|{wkey}", disabled=value is None, on_click=_decide,
-                  args=(key, BUYER_EDIT), kwargs={"value_key": f"edit_value|{wkey}"})
+        _manual_price(price, key, wkey)
+
+
+def _manual_price(price, key, wkey) -> None:
+    value = st.number_input("INR per piece", min_value=0.01, step=0.01, format="%.2f",
+                            value=None if _missing(price) else float(price),
+                            key=f"edit_value|{wkey}")
+    st.button("Save price", key=f"save|{wkey}", disabled=value is None, on_click=_decide,
+              args=(key, BUYER_EDIT), kwargs={"value_key": f"edit_value|{wkey}"})
+
+
+def _fx_gap_actions(r: dict, key, wkey) -> None:
+    """A price in a currency with no rate: the fix is a rate in the sidebar, not a typed price."""
+    code = r["missing_fx_currency"]
+    st.info(f"Not comparable: no FX rate for {code}. Enter a **{code} rate** in the sidebar and this "
+            f"line converts automatically, with the rate shown as an assumption.", icon=":material/currency_exchange:")
+    with st.popover("Type an INR price instead (last resort)"):
+        st.caption(f"Only if you can't get a {code} rate. This skips the conversion, so no FX "
+                   "assumption is recorded for this line.")
+        _manual_price(None, key, wkey)
 
 
 def _decide(key, choice, alternative_index=None, value_key=None) -> None:

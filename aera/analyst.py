@@ -35,6 +35,7 @@ from pydantic import BaseModel, Field
 from aera.compare import AMBIGUOUS_ASSUMPTION, COMPARABLE, FAIL, NOT_COMPARABLE, NOT_QUOTED, PASS, UNCLEAR, WITH_ASSUMPTION
 from aera.config import MODEL
 from aera.extract import ExtractionError, _client, _usage_dict, cost_usd
+from aera.normalize import describe_rates
 from aera.rfx import RFx
 
 log = logging.getLogger(__name__)
@@ -164,7 +165,7 @@ class AnalystData:
     rfx_lines: pd.DataFrame
     last_year: pd.DataFrame
     fx_rates: dict[str, float]
-    fx_date: str | None
+    fx_date: str | dict[str, str] | None  # one date for all rates, or a source text per currency
 
     def namespace(self) -> dict:
         """Fresh copies for one run of generated code. Nothing it does can reach the originals."""
@@ -176,7 +177,7 @@ class AnalystData:
 
 def analyst_data(comparison: pd.DataFrame, summary: pd.DataFrame, rfx: RFx,
                  last_year_prices: dict[int, float], fx_rates: dict[str, float],
-                 fx_date: str | None) -> AnalystData:
+                 fx_date: str | dict[str, str] | None) -> AnalystData:
     rfx_lines = pd.DataFrame(
         [{"line_id": ln.line_id, "description": ln.description, "annual_qty": ln.annual_qty,
           "uom": ln.uom, "nominal_weight_g": ln.nominal_weight_g} for ln in rfx.lines],
@@ -223,8 +224,7 @@ def build_context(data: AnalystData) -> str:
         _json(_records(data.last_year)),
         "",
         "## FX",
-        "INR per unit of currency: " + ", ".join(f"{k} {v:g}" for k, v in data.fx_rates.items())
-        + f". Rate date: {data.fx_date or 'not stated'}.",
+        "FX rates: " + describe_rates(data.fx_rates, data.fx_date) + ".",
     ]
     return "\n".join(parts)
 

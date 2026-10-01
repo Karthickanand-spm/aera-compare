@@ -13,6 +13,7 @@ from aera.rfx_builder import empty_draft
 EVENT = "event"  # aera.event.Event, or None before anything is loaded
 DECISIONS = "decisions"  # {(rfx_line_id, vendor): aera.compare.buyer_decision(...)}
 FX_USD = "fx_usd"  # the USD -> INR rate the buyer is using
+REJECTED_UPLOAD = "rejected_upload"  # {"name", "data", "reason"} of the last upload, if it wasn't a quote
 UPLOADS_DONE = "uploads_done"  # file_ids of uploads already processed (so reruns don't re-extract)
 ASK_HISTORY = "ask_history"  # aera.analyst.Answer list, newest first
 API_CALLS = "api_calls"  # usage dicts (tokens + cost_usd) for every Ask and Clarify call this session
@@ -34,6 +35,7 @@ def init_state() -> None:
     st.session_state.setdefault(DECISIONS, {})
     st.session_state.setdefault(FX_USD, DEFAULT_FX_USD)
     st.session_state.setdefault(UPLOADS_DONE, set())
+    st.session_state.setdefault(REJECTED_UPLOAD, None)
     st.session_state.setdefault(ASK_HISTORY, [])
     st.session_state.setdefault(API_CALLS, [])
     st.session_state.setdefault(AWARD_CONFIRMED, None)
@@ -67,12 +69,24 @@ def fx_is_default() -> bool:
     return st.session_state[FX_USD] == DEFAULT_FX_USD
 
 
-def fx_settings() -> tuple[dict[str, float], str]:
-    """(rates, date text) to pass to compare(). The date text ends up in every FX assumption."""
+# Rates the buyer enters for currencies not in config.FX_RATES (sidebar widgets, one pair per currency).
+FX_EXTRA_RATE = "fx_rate|"  # + currency code -> float or None
+FX_EXTRA_DATE = "fx_date|"  # + currency code -> datetime.date
+
+
+def fx_settings() -> tuple[dict[str, float], dict[str, str]]:
+    """(rates, source text per currency) to pass to compare(). Each source ends up in that FX assumption."""
     rates = {**FX_RATES, "USD": float(st.session_state[FX_USD])}
-    if fx_is_default():
-        return rates, f"{FX_DATE}, {FX_SOURCE.lower()}"
-    return rates, f"{date.today().isoformat()}, entered by the buyer"
+    sources = {code: f"rate dated {FX_DATE}, {FX_SOURCE.lower()}" for code in FX_RATES}
+    if not fx_is_default():
+        sources["USD"] = f"buyer-entered on {date.today().isoformat()}"
+    for key, value in st.session_state.to_dict().items():
+        if isinstance(key, str) and key.startswith(FX_EXTRA_RATE) and value:
+            code = key[len(FX_EXTRA_RATE):]
+            rates[code] = float(value)
+            entered_on = st.session_state.get(FX_EXTRA_DATE + code) or date.today()
+            sources[code] = f"buyer-entered on {entered_on.isoformat()}"
+    return rates, sources
 
 
 def comparison_tables(event: Event):

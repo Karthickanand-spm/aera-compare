@@ -1,0 +1,149 @@
+{
+  "extraction_type": "reply",
+  "extractor_version": 3,
+  "source_file": "F_Nordpack_EUR_quote.xlsx",
+  "file_kind": "excel",
+  "sha256": "1545293dc1ed289f0f016a10cb1cf40aba05c3885b75267f5dd0744d74c61b72",
+  "rfx_id": "MHA/PKG/2026-27/014",
+  "extracted_at": "2026-10-01T09:27:21+00:00",
+  "runs": [
+    {
+      "vendor": "NORDPACK GmbH (fictional)",
+      "lines": [
+        {
+          "rfx_line_id": 11,
+          "raw_price_text": "395",
+          "price": 395.0,
+          "currency": "EUR",
+          "unit_basis": "per_1000",
+          "pack_size": null,
+          "vendor_qty_text": null,
+          "vendor_line_total_text": null,
+          "quoted_spec_if_different": null,
+          "source_snippet": "Offer!A5: Mixer grinder 750W carton, 5-ply | Offer!B5: 450x290x310 | Offer!C5: 395",
+          "page": null,
+          "interpretation_note": "Matched to line 11 (mixer grinder 750W, 5-ply, 450x290x310). The column header reads 'Price EUR / 1000 pcs', so I recorded 395 EUR per 1000 pieces, with no conversion.",
+          "is_ambiguous": false,
+          "candidate_group": null,
+          "ambiguity_reason": null,
+          "source_file": "F_Nordpack_EUR_quote.xlsx"
+        },
+        {
+          "rfx_line_id": 18,
+          "raw_price_text": "348.5",
+          "price": 348.5,
+          "currency": "EUR",
+          "unit_basis": "per_1000",
+          "pack_size": null,
+          "vendor_qty_text": null,
+          "vendor_line_total_text": null,
+          "quoted_spec_if_different": null,
+          "source_snippet": "Offer!A6: Ceiling fan carton, 5-ply | Offer!B6: 620x250x220 | Offer!C6: 348.5",
+          "page": null,
+          "interpretation_note": "Matched to line 18 (ceiling fan 1200mm carton, 5-ply, 620x250x220). The price is EUR per 1000 pieces according to the column header.",
+          "is_ambiguous": false,
+          "candidate_group": null,
+          "ambiguity_reason": null,
+          "source_file": "F_Nordpack_EUR_quote.xlsx"
+        },
+        {
+          "rfx_line_id": 1,
+          "raw_price_text": "61.2",
+          "price": 61.2,
+          "currency": "EUR",
+          "unit_basis": "per_1000",
+          "pack_size": null,
+          "vendor_qty_text": "min. order 20.000 pcs",
+          "vendor_line_total_text": null,
+          "quoted_spec_if_different": null,
+          "source_snippet": "Offer!A7: Steam iron carton, 3-ply | Offer!B7: 310x150x140 | Offer!C7: 61.2 | Offer!D7: min. order 20.000 pcs",
+          "page": null,
+          "interpretation_note": "Matched to line 1 (steam iron carton, 3-ply, 310x150x140). The price is EUR per 1000 pieces according to the column header. The note 'min. order 20.000 pcs' is a minimum order quantity, and I read the dot as a European thousands separator (20,000).",
+          "is_ambiguous": false,
+          "candidate_group": null,
+          "ambiguity_reason": null,
+          "source_file": "F_Nordpack_EUR_quote.xlsx"
+        }
+      ],
+      "not_quoted": [],
+      "commercial_terms": {
+        "freight": {
+          "value": "extra",
+          "source_snippet": "Incoterm: FCA Hamburg."
+        },
+        "payment_days": {
+          "value": 30.0,
+          "raw_text": "Payment 30 days",
+          "source_snippet": "Payment 30 days."
+        },
+        "validity": {
+          "value": "14 days",
+          "source_snippet": "Prices valid 14 days."
+        },
+        "discounts": [],
+        "other_conditions": [
+          {
+            "text": "Incoterm FCA Hamburg, not delivered to Chakan plant",
+            "source_snippet": "Incoterm: FCA Hamburg."
+          },
+          {
+            "text": "Steam iron carton: minimum order 20,000 pcs",
+            "source_snippet": "min. order 20.000 pcs"
+          }
+        ]
+      },
+      "questionnaire": {
+        "iso9001_claimed": {
+          "value": null,
+          "source_snippet": null
+        },
+        "cert_valid_until_claimed": {
+          "value": null,
+          "iso_date": null,
+          "source_snippet": null
+        },
+        "capacity_t_month": {
+          "value": null,
+          "raw_text": null,
+          "source_snippet": null
+        },
+        "lead_time_days": {
+          "value": null,
+          "raw_text": null,
+          "source_snippet": null
+        },
+        "defect_rate_pct": {
+          "value": null,
+          "raw_text": null,
+          "source_snippet": null
+        },
+        "test_report_per_batch": {
+          "value": "not_stated",
+          "source_snippet": null
+        }
+      }
+    }
+  ],
+  "usage": [
+    {
+      "model": "claude-sonnet-5-5",
+      "input_tokens": 4,
+      "output_tokens": 2198,
+      "cache_write_tokens": 8467,
+      "cache_read_tokens": 0
+    }
+  ],
+  "cost_usd": 0.0543,
+  "quote_check": {
+    "is_quote_for_rfx": true,
+    "not_a_quote_reason": null,
+    "suspicious_instructions": []
+  },
+  "quote_check_usage": {
+    "model": "claude-sonnet-5-5",
+    "input_tokens": 4,
+    "output_tokens": 42,
+    "cache_write_tokens": 4252,
+    "cache_read_tokens": 0
+  }
+}

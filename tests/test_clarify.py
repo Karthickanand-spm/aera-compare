@@ -102,6 +102,12 @@ def test_clean_vendor_has_nothing_to_clarify():
     assert items_for(reply([line(1, 10), line(2, 11), line(3, 12)])) == []
 
 
+def test_missing_fx_rate_is_not_asked_of_the_vendor():
+    # The buyer fixes this by entering a rate; the vendor has nothing to clarify.
+    items = items_for(reply([line(1, 395, currency="EUR"), line(2, 11), line(3, 12)]))
+    assert items == []
+
+
 def test_not_quoted_lines_with_the_vendors_words():
     ext = reply([line(1, 10)], not_quoted=[
         {"rfx_line_id": 2, "reason": "not in range", "source_snippet": "Item 2 not in our range"}])

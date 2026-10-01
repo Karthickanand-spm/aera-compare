@@ -1,7 +1,9 @@
 import pytest
 
 from aera.config import FX_RATES
-from aera.normalize import NormalizeError, normalize_price, to_inr, to_per_piece
+from aera.normalize import (
+    MissingFxRate, NormalizeError, describe_rates, normalize_price, to_inr, to_per_piece,
+)
 
 FX = {"USD": 94.50}
 
@@ -40,6 +42,35 @@ def test_per_1000():
 def test_unknown_currency_raises():
     with pytest.raises(NormalizeError, match="EUR"):
         to_inr(10, "EUR", FX)
+
+
+def test_missing_fx_rate_names_the_currency():
+    with pytest.raises(MissingFxRate) as e:
+        to_inr(395, " eur ", FX)
+    assert e.value.currency == "EUR"
+    assert str(e.value) == "No FX rate for EUR"
+
+
+def test_eur_per_1000_at_buyer_entered_rate():
+    """EUR 395 per 1000 at ₹101/EUR = ₹39.90 per piece."""
+    rates = {**FX, "EUR": 101.0}
+    sources = {"EUR": "buyer-entered on 2026-10-01"}
+    value, assumptions = normalize_price(395, "EUR", "per_1000", None, None, rates, sources)
+    assert value == pytest.approx(39.895)
+    assert f"{value:.2f}" == "39.90"
+    assert assumptions == ["EUR at ₹101 per EUR, buyer-entered on 2026-10-01",
+                           "Quoted per 1000 pieces; divided by 1000"]
+
+
+def test_one_date_for_all_rates_still_works():
+    _, note = to_inr(1, "USD", {"USD": 94.5}, "2026-09-25")
+    assert note == "USD at ₹94.5 per USD, rate dated 2026-09-25"
+
+
+def test_describe_rates_lists_each_source():
+    text = describe_rates({"USD": 94.5, "EUR": 101.0},
+                          {"USD": "rate dated 2026-09-25", "EUR": "buyer-entered on 2026-10-01"})
+    assert text == "1 USD = ₹94.5 (rate dated 2026-09-25); 1 EUR = ₹101 (buyer-entered on 2026-10-01)"
 
 
 def test_missing_pack_size_raises():

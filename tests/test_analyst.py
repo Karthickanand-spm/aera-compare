@@ -276,7 +276,7 @@ def test_context_sent_to_claude_has_rules_columns_vendors_and_fx():
     sent = fake.calls[0]
     assert "Missing is never zero" in sent["system"]
     context_block, question_block = sent["messages"][0]["content"]
-    for expected in ("price_inr_per_piece", "UNCLEAR", "USD 94.5", "2026-09-25", "nominal_weight_g"):
+    for expected in ("price_inr_per_piece", "UNCLEAR", "1 USD = ₹94.5", "2026-09-25", "nominal_weight_g"):
         assert expected in context_block["text"]
     assert context_block["cache_control"] == {"type": "ephemeral"}  # reused by follow-up questions
     assert question_block["text"] == "## Buyer's question\nAnything"

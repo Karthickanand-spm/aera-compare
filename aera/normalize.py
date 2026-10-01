@@ -11,20 +11,42 @@ class NormalizeError(ValueError):
     """Raised when a price cannot be converted without guessing."""
 
 
+class MissingFxRate(NormalizeError):
+    """No FX rate for this currency yet. The buyer can enter one; nothing is guessed."""
+
+    def __init__(self, currency: str):
+        self.currency = currency
+        super().__init__(f"No FX rate for {currency}")
+
+
+def currency_code(currency: str | None) -> str:
+    return (currency or "").strip().upper()
+
+
+def fx_date_text(fx_date: str | dict[str, str] | None, code: str) -> str | None:
+    """Where a rate came from. `fx_date` is one date for every rate, or a text per currency."""
+    if isinstance(fx_date, dict):
+        return fx_date.get(code)
+    return f"rate dated {fx_date}" if fx_date else None
+
+
 def to_inr(value: float, currency: str, fx_rates: dict[str, float],
-           fx_date: str | None = None) -> tuple[float, str | None]:
+           fx_date: str | dict[str, str] | None = None) -> tuple[float, str | None]:
     """Convert value to INR. Returns (inr_value, assumption_text or None)."""
-    code = (currency or "").strip().upper()
+    code = currency_code(currency)
     if code == "INR":
         return value, None
     if code not in fx_rates:
-        known = ", ".join(["INR", *sorted(fx_rates)])
-        raise NormalizeError(
-            f"No FX rate for currency '{currency}'. Known currencies: {known}."
-        )
+        raise MissingFxRate(code)
     rate = fx_rates[code]
-    date_text = f" (rate dated {fx_date})" if fx_date else ""
-    return value * rate, f"Converted {code} to INR at {rate:g} INR per {code}{date_text}"
+    source = fx_date_text(fx_date, code)
+    return value * rate, f"{code} at ₹{rate:g} per {code}" + (f", {source}" if source else "")
+
+
+def describe_rates(fx_rates: dict[str, float], fx_date: str | dict[str, str] | None) -> str:
+    """Every rate in use with its source, e.g. '1 USD = ₹94.5 (rate dated 2026-09-25)'."""
+    return "; ".join(f"1 {code} = ₹{rate:g} ({fx_date_text(fx_date, code) or 'date not stated'})"
+                     for code, rate in fx_rates.items())
 
 
 def to_per_piece(value: float, unit_basis: str, pack_size: int | None = None,
@@ -56,7 +78,7 @@ def to_per_piece(value: float, unit_basis: str, pack_size: int | None = None,
 def normalize_price(value: float, currency: str, unit_basis: str,
                     pack_size: int | None, weight_g: float | None,
                     fx_rates: dict[str, float],
-                    fx_date: str | None = None) -> tuple[float, list[str]]:
+                    fx_date: str | dict[str, str] | None = None) -> tuple[float, list[str]]:
     """Convert any quoted price to INR per piece.
 
     Returns (inr_per_piece, assumptions). Assumptions is empty when the price

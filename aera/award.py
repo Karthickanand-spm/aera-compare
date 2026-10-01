@@ -29,6 +29,7 @@ from aera.compare import (
     COUNTED_LABELS, FAIL, HIGH, LOW, MEDIUM, NOT_COMPARABLE, PASS, UNCLEAR, display_name, risk,
     sort_risks, vendor_name,
 )
+from aera.normalize import describe_rates
 
 SINGLE = "Single vendor"
 CHEAPEST = "Cheapest per line"
@@ -431,8 +432,7 @@ def _freight_summary(s: dict) -> str:
 def _assumptions(data: AnalystData, award: Award, summary: pd.DataFrame) -> list[str]:
     s = award.settings
     out = []
-    fx = ", ".join(f"1 {k} = {format_inr(v, per_unit=True)}" for k, v in data.fx_rates.items())
-    out.append(f"FX rate {fx} (rate date {data.fx_date or 'not stated'}).")
+    out.append(f"FX rate {describe_rates(data.fx_rates, data.fx_date)}.")
     out.append(f"Award approach: {s.describe()}. Lines go to the cheapest allowed vendor; when vendor "
                "sets cover different lines, the set covering more lines wins, then the lower total.")
     if s.approach != CHEAPEST and award.combinations_tried > 1:

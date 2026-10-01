@@ -26,7 +26,7 @@ from pathlib import Path
 import pandas as pd
 
 from aera.config import FX_DATE, FX_RATES, LINE_TOTAL_TOLERANCE_PCT, PHOTO_RERUN_TOLERANCE_PCT
-from aera.normalize import NormalizeError, normalize_price, to_per_piece
+from aera.normalize import MissingFxRate, NormalizeError, currency_code, normalize_price, to_per_piece
 from aera.rfx import RFx, RfxLine
 
 COMPARABLE = "Comparable"
@@ -40,6 +40,20 @@ PASS, FAIL, UNCLEAR = "PASS", "FAIL", "UNCLEAR"
 
 HIGH, MEDIUM, LOW = "high", "medium", "low"
 SEVERITY_ORDER = (HIGH, MEDIUM, LOW)
+
+INJECTION_REASON = ("Document contains instructions aimed at automated processing; values were extracted "
+                    "as written, so confirm them before they count")
+INJECTION_RISK = ("Document contains instructions aimed at automated processing: '{text}'. "
+                  "Values were extracted as written; please review")
+# Code backstop for text documents: phrasing that addresses an AI or tries to override instructions.
+# A manipulated model might not report these itself.
+_INJECTION_PATTERNS = [re.compile(p, re.IGNORECASE) for p in (
+    r"\b(ignore|disregard|forget|override)\b.{0,40}\b(instructions?|rules|prompt)\b",
+    r"\b(note|message|instructions?)\s+(to|for)\s+(any|all|the)?\s*(ai|llm|assistant|model|automated|bot)\b",
+    r"\b(ai|llm|language model|chatbot)\s+(system|assistant|model)s?\b",
+    r"\bsystem prompt\b",
+)]
+_MAX_QUOTE = 200
 # A certificate expiring within this many months of the RFx date is a high risk.
 CERT_EXPIRY_HIGH_RISK_MONTHS = 6
 
@@ -62,6 +76,7 @@ COMPARISON_COLUMNS = [
     "label", "included_in_totals", "assumptions", "confidence", "confidence_reasons",
     "source_file", "source_snippet", "page", "quoted_spec", "notes",
     "needs_review", "buyer_confirmed", "buyer_decision", "alternatives",
+    "missing_fx_currency",  # e.g. "EUR" when the price can't count until the buyer enters that rate
 ]
 
 SUMMARY_COLUMNS = [
@@ -129,7 +144,7 @@ def _within_pct(a: float, b: float, pct: float) -> bool:
 # ---------- Price candidates ----------
 
 def _price_candidate(entry: dict, rfx_line: RfxLine, last_year_prices: dict[int, float],
-                     fx_rates: dict[str, float], fx_date: str | None) -> dict:
+                     fx_rates: dict[str, float], fx_date: str | dict[str, str] | None) -> dict:
     """One possible reading of a vendor's price for a line, converted to INR per piece.
 
     Returns {"entry", "price_inr_per_piece" (None if it can't be converted), "assumptions", "error"}.
@@ -154,6 +169,9 @@ def _price_candidate(entry: dict, rfx_line: RfxLine, last_year_prices: dict[int,
     try:
         value, notes = normalize_price(entry["price"], entry["currency"], basis, pack_size,
                                        weight_g, fx_rates, fx_date)
+    except MissingFxRate as e:
+        return _candidate(entry, None, [], f"Not comparable: no FX rate for {e.currency}",
+                          missing_fx=e.currency)
     except NormalizeError as e:
         return _candidate(entry, None, [], f"Could not convert: {e}")
     if basis == "per_kg":
@@ -161,8 +179,9 @@ def _price_candidate(entry: dict, rfx_line: RfxLine, last_year_prices: dict[int,
     return _candidate(entry, value, notes)
 
 
-def _candidate(entry, price, assumptions, error=None) -> dict:
-    return {"entry": entry, "price_inr_per_piece": price, "assumptions": assumptions, "error": error}
+def _candidate(entry, price, assumptions, error=None, missing_fx=None) -> dict:
+    return {"entry": entry, "price_inr_per_piece": price, "assumptions": assumptions, "error": error,
+            "missing_fx": missing_fx}
 
 
 def _alternative(c: dict) -> dict:
@@ -176,10 +195,54 @@ def _alternative(c: dict) -> dict:
     }
 
 
+def currencies_without_rate(extractions: list[dict], fx_rates: dict[str, float]) -> dict[str, dict]:
+    """Currencies vendors priced in that have no FX rate yet: {code: {"vendors": n, "lines": n}}.
+
+    Only priced entries count ("same as last year" and blank prices need no rate)."""
+    found: dict[str, dict[str, set]] = {}
+    for ext in extractions:
+        vendor = vendor_name(ext)
+        for entry in ext["runs"][0].get("lines", []):
+            code = currency_code(entry.get("currency"))
+            if (entry.get("price") is None or entry.get("unit_basis") == "reference_last_year"
+                    or not code or code == "INR" or code in fx_rates):
+                continue
+            seen = found.setdefault(code, {"vendors": set(), "lines": set()})
+            seen["vendors"].add(vendor)
+            seen["lines"].add((vendor, entry.get("rfx_line_id")))
+    return {code: {"vendors": len(v["vendors"]), "lines": len(v["lines"])} for code, v in sorted(found.items())}
+
+
+# ---------- Instructions hidden in a document (prompt injection) ----------
+
+def suspicious_texts(ext: dict, doc_text: str | None = None) -> list[str]:
+    """Text in a vendor document aimed at an AI or at changing how it is processed.
+
+    From Claude's document check (any file type) plus a code scan of the extracted text
+    (Excel / Word / email). Vendor documents are data: these are reported, never followed.
+    """
+    found = [t.strip() for t in (ext.get("quote_check") or {}).get("suspicious_instructions") or []
+             if t and t.strip()]
+    for line in (doc_text or "").splitlines():
+        line = line.strip()
+        if line and any(p.search(line) for p in _INJECTION_PATTERNS):
+            if not any(_squash(line) in _squash(t) or _squash(t) in _squash(line) for t in found):
+                found.append(line)
+    return [t if len(t) <= _MAX_QUOTE else t[:_MAX_QUOTE - 1].rstrip() + "…" for t in found]
+
+
+def _flag_injection(rows: list[dict]) -> None:
+    """Every value from a document with hidden instructions needs the buyer's review."""
+    for row in rows:
+        row["confidence"] = LOW
+        row["confidence_reasons"] = list(row.get("confidence_reasons") or []) + [INJECTION_REASON]
+        row["needs_review"] = True
+
+
 # ---------- Comparison rows ----------
 
 def build_comparison(rfx: RFx, last_year_prices: dict[int, float], extractions: list[dict],
-                     fx_rates: dict[str, float], fx_date: str | None = None,
+                     fx_rates: dict[str, float], fx_date: str | dict[str, str] | None = None,
                      document_texts: dict[str, str | None] | None = None) -> pd.DataFrame:
     """One row per (RFx line, vendor). `extractions` are reply results as cached by extract.py.
 
@@ -250,6 +313,8 @@ def _vendor_rows(rfx, last_year_prices, ext, fx_rates, fx_date, doc_text) -> lis
         else:
             row = _not_quoted_row(declined.get(rfx_line.line_id), other_readings)
         rows.append({**base, **row})
+    if suspicious_texts(ext, doc_text):
+        _flag_injection(rows)
     return rows
 
 
@@ -357,6 +422,7 @@ def _quoted_row(entries, rfx_line, last_year_prices, fx_rates, fx_date,
         "notes": entry.get("interpretation_note"),
         "needs_review": conf.level == "low",
         "alternatives": alternatives,
+        "missing_fx_currency": chosen["missing_fx"] if price is None else None,
     }
 
 
@@ -730,7 +796,9 @@ def _discount_text(d: dict) -> str:
 
 
 def build_vendor_summary(rfx: RFx, extractions: list[dict], certificates: list[dict],
-                         comparison: pd.DataFrame) -> pd.DataFrame:
+                         comparison: pd.DataFrame,
+                         document_texts: dict[str, str | None] | None = None) -> pd.DataFrame:
+    texts = document_texts or {}
     rows = []
     for ext in extractions:
         vendor = vendor_name(ext)
@@ -742,6 +810,8 @@ def build_vendor_summary(rfx: RFx, extractions: list[dict], certificates: list[d
 
         open_risks = [r for r in (_freight_risk(terms.get("freight")),
                                   _missing_answers_risk(first_run)) if r]
+        open_risks += [risk(HIGH, INJECTION_RISK.format(text=t))
+                       for t in suspicious_texts(ext, texts.get(ext.get("source_file")))]
         open_risks = sort_risks(open_risks + quality["risks"])
 
         rows.append({
@@ -764,13 +834,14 @@ def build_vendor_summary(rfx: RFx, extractions: list[dict], certificates: list[d
 
 
 def compare(rfx: RFx, last_year_prices: dict[int, float], extractions: list[dict],
-            certificates: list[dict], fx_rates: dict[str, float], fx_date: str | None = None,
+            certificates: list[dict], fx_rates: dict[str, float],
+            fx_date: str | dict[str, str] | None = None,
             document_texts: dict[str, str | None] | None = None,
             decisions: dict[tuple[int, str], dict] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Returns (comparison, vendor_summary). `decisions` are the buyer's review choices."""
     comparison = build_comparison(rfx, last_year_prices, extractions, fx_rates, fx_date, document_texts)
     comparison = apply_buyer_decisions(comparison, decisions)
-    summary = build_vendor_summary(rfx, extractions, certificates, comparison)
+    summary = build_vendor_summary(rfx, extractions, certificates, comparison, document_texts)
     return comparison, summary
 
 

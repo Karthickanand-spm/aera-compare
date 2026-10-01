@@ -13,6 +13,7 @@ from aera.award import (
     build_award, confirm_award, confirm_blockers, vendor_choices, vendor_discounts,
 )
 from aera.compare import FAIL
+from aera.normalize import describe_rates
 from ui.state import AWARD_CONFIRMED, comparison_tables, fx_settings, get_event, md, now_text
 
 BEST_SINGLE = "Best available vendor"
@@ -52,7 +53,7 @@ def render() -> None:
     _assumptions(award)
     st.divider()
     confirmation = _confirm(award)
-    fx_text = ", ".join(f"1 {k} = {format_inr(v, per_unit=True)}" for k, v in rates.items()) + f" ({fx_date})"
+    fx_text = describe_rates(rates, fx_date)
     st.download_button(
         "Export award (Excel)", award_to_excel(award, event.rfx.rfx_id, fx_text, confirmation, now_text()),
         file_name=f"aera_award_{event.rfx.rfx_id.replace('/', '-')}.xlsx", mime=EXCEL_MIME, on_click="ignore")

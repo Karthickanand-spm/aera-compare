@@ -43,7 +43,12 @@ def test_cache_hit_skips_claude(tmp_path, monkeypatch):
     calls = []
 
     def fake_call(system, content, schema):
-        calls.append(1)
+        calls.append(schema.__name__)
+        if schema is extract.QuoteCheck:
+            return {"is_quote_for_rfx": True, "not_a_quote_reason": ""}, {
+                "model": "m", "input_tokens": 1, "output_tokens": 1,
+                "cache_write_tokens": 0, "cache_read_tokens": 0,
+            }
         return {"vendor": "X", "lines": [{"rfx_line_id": 1}], "not_quoted": []}, {
             "model": "m", "input_tokens": 1, "output_tokens": 1,
             "cache_write_tokens": 0, "cache_read_tokens": 0,
@@ -52,12 +57,13 @@ def test_cache_hit_skips_claude(tmp_path, monkeypatch):
     monkeypatch.setattr(extract, "_call_claude", fake_call)
     first = extract.extract_reply(_payload(), RFX)
     second = extract.extract_reply(_payload(), RFX)
-    assert len(calls) == 1
+    assert calls == ["QuoteCheck", "VendorExtraction"]  # the second read came from the cache
     assert first["from_cache"] is False and second["from_cache"] is True
+    assert second["quote_check"] == {"is_quote_for_rfx": True, "not_a_quote_reason": ""}
     assert second["runs"][0]["lines"][0]["source_file"] == "f.docx"
 
     extract.extract_reply(_payload(), RFX, force=True)  # Re-extract ignores the cache
-    assert len(calls) == 2
+    assert len(calls) == 4
 
 
 def test_images_are_extracted_twice(tmp_path, monkeypatch):
@@ -77,3 +83,10 @@ def test_stale_cache_version_is_ignored(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     assert extract._read_cache("abc123", "reply", RFX.rfx_id) is None
+
+
+def test_every_prompt_that_reads_a_vendor_document_treats_it_as_data():
+    from aera.clarify import DRAFT_RULES
+    for rules in (extract.REPLY_RULES, extract.QUOTE_CHECK_RULES, extract.CERT_RULES, DRAFT_RULES):
+        assert "untrusted data" in rules and "never instructions" in rules
+    assert "suspicious_instructions" in extract.QuoteCheck.model_fields

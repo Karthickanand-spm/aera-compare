@@ -21,6 +21,12 @@ REPLY, CERTIFICATE = "reply", "certificate"
 Progress = Callable[[str], None]
 
 
+class NotAQuote(Exception):
+    """An uploaded file that doesn't look like a quote for this RFx. Nothing was added.
+
+    The message is the plain-English reason. Upload it with allow_non_quote=True to add it anyway."""
+
+
 @dataclass
 class SourceFile:
     name: str
@@ -82,13 +88,46 @@ def reextract_all(event: Event, progress: Progress | None = None) -> Event:
     return fresh
 
 
-def add_reply(event: Event, filename: str, data: bytes,
-              force: bool = True) -> tuple[bool, str | None]:
+def _has_answer(claim: dict | None, empty=(None, "", "unclear", "not_stated")) -> bool:
+    return isinstance(claim, dict) and claim.get("value") not in empty
+
+
+def quote_problem(ext: dict, rfx: RFx) -> str | None:
+    """Why this extraction doesn't look like a quote for the RFx, or None if it does.
+
+    Rejected when Claude's quote check says it isn't a quote, or when code finds nothing a
+    quote would have: no RFx line priced or declined, no questionnaire answer, no commercial term.
+    Older cached extractions have no quote_check; only the code check applies to them.
+    """
+    check = ext.get("quote_check") or {}
+    if check.get("is_quote_for_rfx") is False:
+        reason = (check.get("not_a_quote_reason") or "").strip().rstrip(".")
+        return reason or "it doesn't offer prices or terms for the items in this RFx"
+
+    runs = ext.get("runs") or [{}]
+
+    line_ids = {ln.line_id for ln in rfx.lines}
+    for run in runs:
+        matched = any(q.get("rfx_line_id") in line_ids for q in run.get("lines") or [])
+        declined = any(n.get("rfx_line_id") in line_ids and (n.get("source_snippet") or "").strip()
+                       for n in run.get("not_quoted") or [])
+        answers = any(_has_answer(c) for c in (run.get("questionnaire") or {}).values())
+        terms = run.get("commercial_terms") or {}
+        has_terms = (any(_has_answer(terms.get(k)) for k in ("freight", "payment_days", "validity"))
+                     or bool(terms.get("discounts")) or bool(terms.get("other_conditions")))
+        if matched or declined or answers or has_terms:
+            return None
+    return "no RFx lines, questionnaire answers or commercial terms were found in it"
+
+
+def add_reply(event: Event, filename: str, data: bytes, force: bool = True,
+              allow_non_quote: bool = False) -> tuple[bool, str | None]:
     """Extract one uploaded reply and add it to the event.
 
     Returns (added, note), where note is a plain-English message or None. A reply from a
     vendor already in the event replaces that vendor's earlier reply. Raises
-    ExtractionError / ValueError with a readable message if the file can't be used.
+    ExtractionError / ValueError with a readable message if the file can't be used, and
+    NotAQuote (event unchanged) if it doesn't look like a quote, unless allow_non_quote=True.
     """
     payload = load_reply_bytes(filename, data)
     for ext in event.replies:
@@ -100,6 +139,9 @@ def add_reply(event: Event, filename: str, data: bytes,
                          "Rename the file and upload it again.")
 
     ext = extract_reply(payload, event.rfx, force=force)
+    problem = quote_problem(ext, event.rfx)
+    if problem and not allow_non_quote:
+        raise NotAQuote(problem)
     new_vendor = vendor_name(ext)
     replaced = [e for e in event.replies if vendor_name(e) == new_vendor]
     event.replies = [e for e in event.replies if vendor_name(e) != new_vendor] + [ext]

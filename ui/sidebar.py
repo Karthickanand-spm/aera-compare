@@ -1,13 +1,16 @@
 """Sidebar shown on every page: load the event, FX rate, add a reply, re-extract."""
 
+from datetime import date
+
 import streamlit as st
 
-from aera.compare import vendor_name
-from aera.config import FX_DATE, FX_SOURCE
-from aera.event import add_reply, load_sample_event, reextract_all
+from aera.compare import currencies_without_rate, vendor_name
+from aera.config import FX_DATE, FX_RATES, FX_SOURCE
+from aera.event import NotAQuote, add_reply, load_sample_event, reextract_all
 from aera.extract import ExtractionError
 from ui.state import (
-    API_CALLS, DECISIONS, DEFAULT_FX_USD, FX_USD, UPLOADS_DONE, fx_is_default, get_event, set_event,
+    API_CALLS, DECISIONS, DEFAULT_FX_USD, FX_EXTRA_DATE, FX_EXTRA_RATE, FX_USD, REJECTED_UPLOAD, UPLOADS_DONE, fx_is_default, get_event,
+    md, set_event,
 )
 
 UPLOAD_TYPES = ["xlsx", "docx", "pdf", "eml", "jpg", "jpeg", "png"]
@@ -18,9 +21,11 @@ def render_sidebar() -> None:
         st.header("Event")
         _load_sample()
         st.divider()
-        _fx_input()
+        extra_fx = _fx_input()
         st.divider()
         _upload()
+        # Filled after the upload, so a currency in a reply added on this run gets its input at once.
+        _extra_fx_inputs(extra_fx)
         st.divider()
         _reextract()
         st.divider()
@@ -51,7 +56,8 @@ def _load_sample() -> None:
         st.warning("Some files could not be used:\n\n" + "\n".join(f"- {e}" for e in event.errors))
 
 
-def _fx_input() -> None:
+def _fx_input():
+    """The USD rate. Returns the spot under it where rates for other currencies go."""
     st.number_input("USD to INR rate", min_value=0.01, step=0.25, format="%.2f", key=FX_USD,
                     help="Used for every USD price. Changing it recomputes the comparison.")
     st.caption(f"Rate date {FX_DATE} · {FX_SOURCE}")
@@ -59,6 +65,31 @@ def _fx_input() -> None:
         st.caption(f"You changed the rate (default {DEFAULT_FX_USD:.2f}). "
                    "Assumptions now say it was entered by you.")
         st.button("Reset to default rate", on_click=_reset_fx)
+    return st.container()
+
+
+def _extra_fx_inputs(spot) -> None:
+    event = get_event()
+    if event is None:
+        return
+    with spot:
+        # Checked against config rates only, so a currency's input stays put once the buyer fills it.
+        for code, needed in currencies_without_rate(event.replies, FX_RATES).items():
+            _extra_fx_input(code, needed)
+
+
+def _extra_fx_input(code: str, needed: dict) -> None:
+    """A rate for a currency the app has no rate for. Empty by default: nothing is guessed."""
+    vendors, lines = needed["vendors"], needed["lines"]
+    label = (f"{code} rate (₹ per {code}) — needed for {vendors} vendor{'s' if vendors != 1 else ''}, "
+             f"{lines} line{'s' if lines != 1 else ''}")
+    rate = st.number_input(label, min_value=0.01, step=0.25, format="%.2f", value=None,
+                           key=FX_EXTRA_RATE + code, placeholder="Enter a rate",
+                           help=f"The app has no {code} rate. Until you enter one, {code} prices stay "
+                                "Not comparable and out of totals.")
+    st.date_input("Rate date", value=date.today(), key=FX_EXTRA_DATE + code)
+    st.caption("Buyer-entered rate · shown in every assumption that uses it" if rate
+               else f"Buyer-entered rate · empty, so {code} prices stay Not comparable")
 
 
 def _reset_fx() -> None:
@@ -74,16 +105,27 @@ def _upload() -> None:
     if event is None:
         st.caption("Load an event first.")
         return
-    if uploaded is None or uploaded.file_id in st.session_state[UPLOADS_DONE]:
-        return
-
-    # Mark it first: a failed upload is not retried on every click. Upload it again to retry.
-    st.session_state[UPLOADS_DONE].add(uploaded.file_id)
-    try:
+    if uploaded is not None and uploaded.file_id not in st.session_state[UPLOADS_DONE]:
+        # Mark it first: a failed upload is not retried on every click. Upload it again to retry.
+        st.session_state[UPLOADS_DONE].add(uploaded.file_id)
+        st.session_state[REJECTED_UPLOAD] = None
         with st.spinner(f"Reading {uploaded.name} with Claude..."):
-            added, note = add_reply(event, uploaded.name, uploaded.getvalue())
+            _add(event, uploaded.name, uploaded.getvalue())
+    _rejected_upload(event)
+
+
+def _add(event, name: str, data: bytes, force: bool = True, allow_non_quote: bool = False) -> None:
+    """Add one reply to the event and say what happened. A non-quote is held back for the buyer."""
+    try:
+        added, note = add_reply(event, name, data, force=force, allow_non_quote=allow_non_quote)
+    except NotAQuote as e:
+        st.session_state[REJECTED_UPLOAD] = {"name": name, "data": data, "reason": str(e)}
+        # The warning sits under the uploader, often below the fold of the sidebar; the toast shows on screen.
+        st.toast(f"{md(name)} was not added: it doesn't look like a quote for this RFx. See the sidebar.",
+                 icon=":material/warning:")
+        return
     except (ExtractionError, ValueError) as e:
-        st.error(f"Could not add {uploaded.name}: {e}")
+        st.error(f"Could not add {name}: {e}")
         return
 
     if not added:
@@ -93,7 +135,22 @@ def _upload() -> None:
     new_vendor = vendor_name(event.replies[-1])
     st.session_state[DECISIONS] = {k: v for k, v in st.session_state[DECISIONS].items()
                                    if k[1] != new_vendor}
-    st.success(note or f"Added {uploaded.name} to the comparison.")
+    st.success(note or f"Added {name} to the comparison.")
+
+
+def _rejected_upload(event) -> None:
+    """Warn about an upload that isn't a quote, until the next upload.
+
+    'Add anyway' reuses the cached extraction (no API cost)."""
+    rejected = st.session_state[REJECTED_UPLOAD]
+    if rejected is None:
+        return
+    warning = st.empty()  # cleared below if the buyer adds it, so the warning and "Added" don't both show
+    warning.warning(f"This doesn't look like a quote for this RFx: {md(rejected['reason'])}. Nothing was added.")
+    if st.button("Add anyway", key="add_rejected_upload", type="tertiary", icon=":material/add:"):
+        warning.empty()
+        st.session_state[REJECTED_UPLOAD] = None
+        _add(event, rejected["name"], rejected["data"], force=False, allow_non_quote=True)
 
 
 def _reextract() -> None:

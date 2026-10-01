@@ -1,0 +1,85 @@
+{
+  "extraction_type": "reply",
+  "extractor_version": 3,
+  "source_file": "H_not_a_quote_lunch_menu.pdf",
+  "file_kind": "pdf",
+  "sha256": "b26dd2f5a2a66b122760f8bd927595c34b85dbac721ec9bbe7a803e30ee854c2",
+  "rfx_id": "MHA/PKG/2026-27/014",
+  "extracted_at": "2026-10-01T09:26:42+00:00",
+  "runs": [
+    {
+      "vendor": null,
+      "lines": [],
+      "not_quoted": [],
+      "commercial_terms": {
+        "freight": {
+          "value": "unclear",
+          "source_snippet": null
+        },
+        "payment_days": {
+          "value": null,
+          "raw_text": null,
+          "source_snippet": null
+        },
+        "validity": {
+          "value": null,
+          "source_snippet": null
+        },
+        "discounts": [],
+        "other_conditions": []
+      },
+      "questionnaire": {
+        "iso9001_claimed": {
+          "value": null,
+          "source_snippet": null
+        },
+        "cert_valid_until_claimed": {
+          "value": null,
+          "iso_date": null,
+          "source_snippet": null
+        },
+        "capacity_t_month": {
+          "value": null,
+          "raw_text": null,
+          "source_snippet": null
+        },
+        "lead_time_days": {
+          "value": null,
+          "raw_text": null,
+          "source_snippet": null
+        },
+        "defect_rate_pct": {
+          "value": null,
+          "raw_text": null,
+          "source_snippet": null
+        },
+        "test_report_per_batch": {
+          "value": "not_stated",
+          "source_snippet": null
+        }
+      }
+    }
+  ],
+  "usage": [
+    {
+      "model": "claude-sonnet-5-5",
+      "input_tokens": 4,
+      "output_tokens": 307,
+      "cache_write_tokens": 9798,
+      "cache_read_tokens": 0
+    }
+  ],
+  "cost_usd": 0.0422,
+  "quote_check": {
+    "is_quote_for_rfx": false,
+    "not_a_quote_reason": "a canteen menu listing meal prices, not corrugated packaging",
+    "suspicious_instructions": []
+  },
+  "quote_check_usage": {
+    "model": "claude-sonnet-5-5",
+    "input_tokens": 4,
+    "output_tokens": 63,
+    "cache_write_tokens": 5583,
+    "cache_read_tokens": 0
+  }
+}
