@@ -14,8 +14,12 @@ DECISIONS = "decisions"  # {(rfx_line_id, vendor): aera.compare.buyer_decision(.
 FX_USD = "fx_usd"  # the USD -> INR rate the buyer is using
 UPLOADS_DONE = "uploads_done"  # file_ids of uploads already processed (so reruns don't re-extract)
 ASK_HISTORY = "ask_history"  # aera.analyst.Answer list, newest first
-API_CALLS = "api_calls"  # usage dicts (tokens + cost_usd) for every Ask call this session
+API_CALLS = "api_calls"  # usage dicts (tokens + cost_usd) for every Ask and Clarify call this session
 AWARD_CONFIRMED = "award_confirmed"  # aera.award.confirm_award(...) record, or None
+CLARIFY_DRAFTS = "clarify_drafts"  # {vendor: aera.clarify.Draft}
+CLARIFY_EXTRA = "clarify_extra"  # {vendor: [analyst missing-data text]} sent over from the Ask page
+CLARIFY_FOCUS = "clarify_focus"  # vendor to show first on the Clarify page, or None
+SENT_LOG = "sent_log"  # [{"Vendor", "Time", "Subject"}] for simulated sends
 
 DEFAULT_FX_USD = FX_RATES["USD"]
 
@@ -28,6 +32,10 @@ def init_state() -> None:
     st.session_state.setdefault(ASK_HISTORY, [])
     st.session_state.setdefault(API_CALLS, [])
     st.session_state.setdefault(AWARD_CONFIRMED, None)
+    st.session_state.setdefault(CLARIFY_DRAFTS, {})
+    st.session_state.setdefault(CLARIFY_EXTRA, {})
+    st.session_state.setdefault(CLARIFY_FOCUS, None)
+    st.session_state.setdefault(SENT_LOG, [])
 
 
 def get_event() -> Event | None:
@@ -35,10 +43,15 @@ def get_event() -> Event | None:
 
 
 def set_event(event: Event) -> None:
-    """A freshly loaded or re-extracted event. Earlier review decisions no longer apply."""
+    """A freshly loaded or re-extracted event. Earlier review decisions and drafts no longer apply.
+
+    The sent log is kept: it is a record of what was already sent."""
     st.session_state[EVENT] = event
     st.session_state[DECISIONS] = {}
     st.session_state[AWARD_CONFIRMED] = None
+    st.session_state[CLARIFY_DRAFTS] = {}
+    st.session_state[CLARIFY_EXTRA] = {}
+    st.session_state[CLARIFY_FOCUS] = None
 
 
 def fx_is_default() -> bool:

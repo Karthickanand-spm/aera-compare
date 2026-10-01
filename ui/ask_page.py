@@ -11,6 +11,9 @@ from aera.analyst import (
     AnalystError, Answer, analyst_data, ask, display_table, format_money, money_header, money_kind,
     to_excel_bytes,
 )
+from aera.clarify import vendors_mentioned
+from aera.compare import display_name, vendor_name
+from ui import clarify_page
 from ui.state import API_CALLS, ASK_HISTORY, comparison_tables, fx_settings, get_event, md
 
 # Starting points only: each one is sent to Claude like any typed question.
@@ -41,7 +44,7 @@ def render() -> None:
     question = st.session_state.pop(PENDING, None)
     if question:
         _answer(event, question)
-    _history()
+    _history(event)
 
 
 def _question_box() -> None:
@@ -77,18 +80,19 @@ def _answer(event, question: str) -> None:
 
 # ---------- History ----------
 
-def _history() -> None:
+def _history(event) -> None:
     history = st.session_state[ASK_HISTORY]
     if not history:
         return
+    vendors = {display_name(vendor_name(ext)): vendor_name(ext) for ext in event.replies}
     st.divider()
     st.subheader("Answers (newest first)")
     for answer in history:
         with st.container(border=True):
-            _show(answer)
+            _show(answer, vendors)
 
 
-def _show(a: Answer) -> None:
+def _show(a: Answer, vendors: dict[str, str]) -> None:
     st.markdown(f"**Q: {md(a.question)}**")
     st.caption(f"{a.asked_at} · {len(a.usages)} Claude calls · ~${a.cost_usd:.4f}")
 
@@ -112,8 +116,8 @@ def _show(a: Answer) -> None:
     if not a.data_sufficient:
         st.markdown("**The data can't fully answer this. Missing:**")
         st.markdown("\n".join(f"- {md(m)}" for m in a.missing_data) or "- (not stated)")
-        st.button("Draft clarification to vendor", key=f"clarify_{a.id}", disabled=True,
-                  help="Coming in a later step.")
+        if a.missing_data:
+            _clarify_buttons(a, vendors)
 
     if a.table is not None and not a.error:
         st.download_button("Download as Excel", to_excel_bytes(a), file_name=f"aera_answer_{a.id}.xlsx",
@@ -139,6 +143,26 @@ def _show(a: Answer) -> None:
                 st.dataframe(display_table(a.table), hide_index=True)
             else:
                 st.code(str(a.result), language=None)
+
+
+def _clarify_buttons(a: Answer, vendors: dict[str, str]) -> None:
+    """One button per vendor the missing data names; a vendor picker if it names none.
+
+    `vendors` maps display name -> vendor. The button opens the Clarify page with that
+    vendor first and the missing items added to its list.
+    """
+    names = list(vendors)
+    per_vendor = {n: [m for m in a.missing_data if n in vendors_mentioned(m, names)] for n in names}
+    named = [n for n in names if per_vendor[n]]
+    for n in named:
+        if st.button(f"Draft clarification to {n}", key=f"clarify_{a.id}_{n}"):
+            clarify_page.open_for(vendors[n], per_vendor[n])
+    if named:
+        return
+    pick = st.selectbox("Vendor to ask", names, key=f"clarify_pick_{a.id}",
+                        help="The missing data doesn't name a vendor. Pick who should be asked.")
+    if st.button("Draft clarification to vendor", key=f"clarify_{a.id}"):
+        clarify_page.open_for(vendors[pick], a.missing_data)
 
 
 def _freight_table(sv: dict) -> None:

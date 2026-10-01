@@ -32,7 +32,7 @@ def _api_cost() -> None:
     total = sum(u["cost_usd"] for u in calls)
     tokens_in = sum(u["input_tokens"] + u["cache_write_tokens"] + u["cache_read_tokens"] for u in calls)
     tokens_out = sum(u["output_tokens"] for u in calls)
-    st.caption(f"Ask page API cost this session: **~${total:.4f}** "
+    st.caption(f"Ask and Clarify API cost this session: **~${total:.4f}** "
                f"({len(calls)} calls, {tokens_in:,} tokens in, {tokens_out:,} out)")
 
 
