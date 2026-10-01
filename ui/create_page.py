@@ -49,8 +49,7 @@ COLUMN_CONFIG = {
 
 
 def render() -> None:
-    page_header("Create RFx", "Describe what you need and Claude drafts the request for quotes with you.",
-                "send it to vendors, then load the sample event to see how replies are compared.")
+    page_header("Create RFx", "Describe what you need and Claude drafts the request for quotes with you.")
     if info_strip("Want to see what happens when replies come back? A sample event with 5 vendor "
                   "replies is ready.", "Open the sample event", key="sample_strip"):
         _open_sample()

@@ -14,24 +14,27 @@ from aera.analyst import (
 )
 from aera.clarify import vendors_mentioned
 from aera.compare import display_name, vendor_name
-from aera.ui import card, empty_state, page_header
+from aera.ui import card, empty_state, has_high_risk, page_header, split_headline, watch_box
 from ui import clarify_page
 from ui.state import API_CALLS, ASK_HISTORY, comparison_tables, fx_settings, get_event, load_sample, md
 
 # Starting points only: each one is sent to Claude like any typed question.
-EXAMPLES = [
-    "Which vendor is cheapest on the lines every vendor quoted?",
-    "Total annual cost per vendor, only for vendors that cleared quality",
-    "Chart each vendor's savings against last year's prices",
-    "Which vendors have high-severity open risks, and what are they?",
+SUGGESTED = [
+    "Split the award among vendors who cleared quality. Total vs last year?",
+    "Is Ganesh cheapest once freight is in?",
+    "Which vendor is best?",
+    "Cap the award at two vendors",
+    "Which lines did Indus not quote?",
+    "Show total annual cost by vendor",
 ]
 PENDING = "ask_pending"  # question waiting to be answered on this run
+CHIPS = "ask_chips"  # the suggested-question pills
 EXCEL_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def render() -> None:
-    page_header("Ask", "Ask questions about the comparison in plain English and get answers worked out in code.",
-                "when you're ready, choose and confirm the award on Decide.")
+    page_header("Ask", "Ask about the comparison in plain English. "
+                "The app works out the answer in code and shows its working.")
     event = get_event()
     if event is None:
         empty_state("No event loaded yet. Load the sample event to ask questions about its quotes.", "Load sample event", load_sample)
@@ -40,9 +43,6 @@ def render() -> None:
         st.warning("No vendor replies could be read yet. See the sidebar for details.")
         return
 
-    st.caption("Ask about the comparison in plain English. Claude works out what you're asking, "
-               "the app's code does all the maths, and the code is shown under every answer. "
-               "Each question uses API credit (see the sidebar).")
     _question_box()
     question = st.session_state.pop(PENDING, None)
     if question:
@@ -51,26 +51,27 @@ def render() -> None:
 
 
 def _question_box() -> None:
-    st.markdown("**Try one of these:**")
-    cols = st.columns(len(EXAMPLES))
-    for i, (col, q) in enumerate(zip(cols, EXAMPLES)):
-        col.button(q, key=f"example_{i}", on_click=_set_pending, args=(q,), width="stretch")
-    with st.form("ask_form", clear_on_submit=True):
+    st.pills("Try one of these", SUGGESTED, key=CHIPS, on_change=_chip_picked)
+    with st.form("ask_form", clear_on_submit=True, enter_to_submit=True):
         typed = st.text_input("Your question",
                               placeholder="e.g. How much would we save on line 3 by switching vendor?")
         if st.form_submit_button("Ask", type="primary") and typed.strip():
             st.session_state[PENDING] = typed.strip()
 
 
-def _set_pending(question: str) -> None:
-    st.session_state[PENDING] = question
+def _chip_picked() -> None:
+    """Ask the clicked chip's question, and clear the chip so it can be clicked again."""
+    question = st.session_state[CHIPS]
+    st.session_state[CHIPS] = None
+    if question:
+        st.session_state[PENDING] = question
 
 
 def _answer(event, question: str) -> None:
     comparison, summary = comparison_tables(event)
     rates, fx_date = fx_settings()
     data = analyst_data(comparison, summary, event.rfx, event.last_year, rates, fx_date)
-    with st.spinner("Claude is working out the analysis..."):
+    with st.spinner("Working it out..."):
         try:
             answer = ask(question, data)
         except AnalystError as e:
@@ -89,22 +90,26 @@ def _history(event) -> None:
         return
     vendors = {display_name(vendor_name(ext)): vendor_name(ext) for ext in event.replies}
     st.divider()
-    st.subheader("Answers, newest first", anchor=False)
-    for answer in history:
-        with card():
+    newest, *older = history
+    with card():
+        st.caption(f"You asked: {md(newest.question)}")
+        _show(newest, vendors)
+    if older:
+        st.subheader("Earlier answers", anchor=False)
+    for answer in older:
+        with st.expander(md(answer.question), key=f"ask_old_{answer.id}"):
             _show(answer, vendors)
 
 
 def _show(a: Answer, vendors: dict[str, str]) -> None:
-    st.markdown(f"**Q: {md(a.question)}**")
-    st.caption(f"{a.asked_at} · {len(a.usages)} Claude calls · ~${a.cost_usd:.4f}")
-
+    """One answer: headline, the rest of the text, table or chart, what to watch, the working, the tag."""
     if a.error:
         st.warning(a.error)
     else:
-        st.markdown(md(a.text))
-        if a.tag:
-            st.caption(f"Answered as: {md(a.tag)}")
+        head, rest = split_headline(a.text)
+        st.markdown(f"**{md(head)}**")
+        if rest:
+            st.markdown(md(rest))
         if a.unchecked_numbers:
             st.warning("Check these numbers: they appear in the sentences above but not in the "
                        "calculated result: " + ", ".join(a.unchecked_numbers))
@@ -118,9 +123,6 @@ def _show(a: Answer, vendors: dict[str, str]) -> None:
         for sv in a.sensitivity:
             _freight_table(sv)
 
-    if a.caveats and not a.error:
-        st.warning("**Caveats**\n\n" + "\n".join(f"- {md(c)}" for c in a.caveats))
-
     if not a.data_sufficient:
         st.markdown("**The data can't fully answer this. Missing:**")
         st.markdown("\n".join(f"- {md(m)}" for m in a.missing_data) or "- (not stated)")
@@ -131,7 +133,11 @@ def _show(a: Answer, vendors: dict[str, str]) -> None:
         st.download_button("Download as Excel", to_excel_bytes(a), file_name=f"aera_answer_{a.id}.xlsx",
                            mime=EXCEL_MIME, key=f"xlsx_{a.id}", on_click="ignore")
 
-    with st.expander("Show the working"):
+    if a.caveats and not a.error:
+        with watch_box(a.id, expanded=has_high_risk(a.caveats)):
+            st.markdown("\n".join(f"- {md(c)}" for c in a.caveats))
+
+    with st.expander("Show the working", key=f"working_{a.id}"):
         if a.explanation:
             st.markdown(md(a.explanation))
         if a.code:
@@ -152,6 +158,9 @@ def _show(a: Answer, vendors: dict[str, str]) -> None:
             else:
                 st.code(str(a.result), language=None)
 
+    tag = f"Answered as: {md(a.tag)} · " if a.tag else ""
+    st.caption(f"{tag}{a.asked_at} · {len(a.usages)} Claude calls · ~${a.cost_usd:.4f}")
+
 
 def _clarify_buttons(a: Answer, vendors: dict[str, str]) -> None:
     """One button per vendor the missing data names; a vendor picker if it names none.
@@ -163,13 +172,13 @@ def _clarify_buttons(a: Answer, vendors: dict[str, str]) -> None:
     per_vendor = {n: [m for m in a.missing_data if n in vendors_mentioned(m, names)] for n in names}
     named = [n for n in names if per_vendor[n]]
     for n in named:
-        if st.button(f"Draft clarification to {n}", key=f"clarify_{a.id}_{n}"):
+        if st.button(f"Draft clarification to {n}", key=f"clarify_{a.id}_{n}", icon=":material/mail:"):
             clarify_page.open_for(vendors[n], per_vendor[n])
     if named:
         return
     pick = st.selectbox("Vendor to ask", names, key=f"clarify_pick_{a.id}",
                         help="The missing data doesn't name a vendor. Pick who should be asked.")
-    if st.button("Draft clarification to vendor", key=f"clarify_{a.id}"):
+    if st.button("Draft clarification", key=f"clarify_{a.id}", icon=":material/mail:"):
         clarify_page.open_for(vendors[pick], a.missing_data)
 
 

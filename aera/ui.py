@@ -38,13 +38,14 @@ TEAL = "#0F766E"  # same as primaryColor in .streamlit/config.toml; white text o
 
 _STYLES = f"""
 <style>
-/* Tighter page spacing than Streamlit's default. */
-[data-testid="stMainBlockContainer"] {{ padding-top: 3.5rem; padding-bottom: 2rem; }}
+/* Tighter page spacing than Streamlit's default. 4rem top clears the toolbar so the stepper is never clipped. */
+[data-testid="stMainBlockContainer"] {{ padding-top: 4rem; padding-bottom: 2rem; }}
 [data-testid="stSidebarUserContent"] {{ padding-top: 0.5rem; }}
 [data-testid="stSidebarUserContent"] hr {{ margin: 0.75rem 0; }}
 
-/* Workflow stepper. Text inherits the theme colour, so it reads well in light and dark mode. */
-.aera-stepper {{ display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem;
+/* Workflow stepper. Text inherits the theme colour, so it reads well in light and dark mode.
+   The stHtml prefix outranks Streamlit's own list indent, so the first step lines up with the title. */
+[data-testid="stHtml"] ol.aera-stepper {{ display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem;
   list-style: none; margin: 0 0 0.25rem 0; padding: 0; font-size: 0.85rem; }}
 .aera-step {{ display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.7rem 0.2rem 0.3rem;
   border-radius: 999px; border: 1px solid rgba(128, 128, 128, 0.4); color: inherit; white-space: nowrap; }}
@@ -71,12 +72,17 @@ def apply_styles() -> None:
 
 # ---------- Header and stepper ----------
 
-def page_header(title: str, purpose: str, next_step: str | None = None) -> None:
-    """Page title, one plain sentence on what the page is for, and a subtle hint of what comes next."""
-    st.title(title, anchor=False)
-    st.markdown(purpose)
-    if next_step:
-        st.caption(f"Next: {next_step}")
+def page_header(title: str, purpose: str) -> None:
+    """Compact page title with one plain sentence on what the page is for directly under it."""
+    st.markdown(header_html(title, purpose), unsafe_allow_html=True)
+
+
+def header_html(title: str, purpose: str) -> str:
+    """One HTML block, so the title and purpose share a single flow and can't overlap.
+    Inline styles beat Streamlit's own heading padding at any zoom."""
+    return (f'<h2 style="margin: 0 0 0.25rem 0; padding: 0; line-height: 1.2; font-size: 1.75rem;">'
+            f'{html.escape(title)}</h2>'
+            f'<p style="margin: 0 0 1rem 0;">{html.escape(purpose)}</p>')
 
 
 def stepper_html(current: str, completed: Iterable[str] = ()) -> str:
@@ -166,9 +172,8 @@ def info_strip(message: str, button_label: str, key: str) -> bool:
 
 # ---------- Answer cards ----------
 
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s+|
-")
-_HIGH_RISK = re.compile(r"high[- ]?(severity|risk)|HIGH", re.IGNORECASE)
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+|\n")
+_HIGH_RISK = re.compile(r"\bhigh[- ]?(severity|risk)|\bHIGH\b", re.IGNORECASE)
 
 
 def split_headline(text: str) -> tuple[str, str]:

@@ -23,8 +23,7 @@ EXCEL_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 def render() -> None:
     page_header("Decide", "Choose how to split the award, check its risks, and confirm it. "
-                "The app recommends; you decide.",
-                "ask vendors about anything still open on Clarify.")
+                "The app recommends; you decide.")
     event = get_event()
     if event is None:
         empty_state("No event loaded yet. Load the sample event to build an award from its quotes.", "Load sample event", load_sample)

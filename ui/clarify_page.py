@@ -36,8 +36,7 @@ def open_for(vendor: str, missing: list[str]) -> None:
 
 
 def render() -> None:
-    page_header("Clarify", "Draft one email per vendor asking about anything that is still unclear in their quote.",
-                "send the drafts, then add each vendor's answer as a new reply from the sidebar.")
+    page_header("Clarify", "Draft one email per vendor asking about anything that is still unclear in their quote.")
     event = get_event()
     if event is None:
         empty_state("No event loaded yet. Load the sample event to see what each vendor still needs to clarify.", "Load sample event", load_sample)

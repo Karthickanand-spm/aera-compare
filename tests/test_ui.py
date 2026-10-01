@@ -1,7 +1,9 @@
 """Display helpers: one colour per status everywhere, and the workflow stepper."""
 
 from aera.compare import COMPARABLE, FAIL, NOT_COMPARABLE, NOT_QUOTED, PASS, UNCLEAR, WITH_ASSUMPTION
-from aera.ui import STEPS, badge_color, badge_md, sidebar_sections, status_text_md, stepper_html, tint
+from aera.ui import (
+    STEPS, badge_color, badge_md, has_high_risk, header_html, sidebar_sections, split_headline, status_text_md, stepper_html, tint,
+)
 from ui.state import (
     ASK_HISTORY, AWARD_CONFIRMED, EVENT, RFX_SENT_LOG, SENT_LOG, completed_steps,
 )
@@ -71,3 +73,33 @@ def test_setup_pages_show_only_the_session_section():
 def test_event_pages_show_all_three_sections():
     for page in ("Compare", "Ask", "Decide", "Clarify"):
         assert sidebar_sections(page) == ("Event", "Assumptions", "Session")
+
+
+def test_headline_is_the_first_sentence():
+    assert split_headline("E is cheapest. It saves 4% on last year.") == ("E is cheapest.", "It saves 4% on last year.")
+    assert split_headline("Is that right? Yes!") == ("Is that right?", "Yes!")
+
+
+def test_headline_ignores_decimals_and_stops_at_a_line_break():
+    assert split_headline("Saving is ₹1.5 lakh. Details below.") == ("Saving is ₹1.5 lakh.", "Details below.")
+    assert split_headline("Totals by vendor\n- A: ₹2 lakh") == ("Totals by vendor", "- A: ₹2 lakh")
+
+
+def test_headline_of_one_sentence_or_nothing():
+    assert split_headline("  Only one sentence.  ") == ("Only one sentence.", "")
+    assert split_headline("") == ("", "")
+    assert split_headline(None) == ("", "")
+
+
+def test_high_risk_caveats_open_what_to_watch():
+    assert has_high_risk(["Vendor B has a high-severity open risk: no ISO certificate."])
+    assert has_high_risk(["Open risk (HIGH): late deliveries."])
+    assert has_high_risk(["High risk of delay."])
+    assert not has_high_risk(["Freight not quoted, so this total is before freight.", "Highest saving is on line 3."])
+    assert not has_high_risk([])
+
+
+def test_page_header_is_one_block_with_escaped_text():
+    out = header_html("Ask", "Vendors <A> & B.")
+    assert out.startswith("<h2 ") and "line-height: 1.2" in out and "<p " in out
+    assert "&lt;A&gt; &amp; B." in out and "Next:" not in out
